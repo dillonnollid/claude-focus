@@ -272,9 +272,11 @@ export const register: Register = (on, options) => {
     let hero
 
     if (Svg !== undefined) {
-      // One drawing per minute shown, kept between redraws in between. It is an
+      // A fresh drawing every ten seconds while the clock runs, each moving the
+      // arc on for twenty, so the next arrives before this one stops. It is an
       // image, as the day card is, so it stretches to the pane's width.
-      const key = JSON.stringify([d.t, label, shownMinute, round, s.longEvery, s.focusMs])
+      const isRunning = !d.isIdle && !d.isPaused
+      const key = JSON.stringify([d.t, label, shownMinute, round, s.longEvery, s.focusMs, isRunning ? Math.floor(v.now / 10_000) : 0])
 
       if (ring === undefined || ring.key !== key) {
         ring = {
@@ -287,6 +289,7 @@ export const register: Register = (on, options) => {
             isCountUp: d.isFlow && d.isFocus,
             round: d.isIdle || !d.isFocus || d.isFlow ? 0 : round,
             rounds: d.isIdle || !d.isFocus || d.isFlow ? 0 : s.longEvery,
+            moveMs: isRunning ? 20_000 : 0,
           }),
         }
       }
@@ -370,7 +373,7 @@ export const register: Register = (on, options) => {
         )
       : d.isFocus
         ? card(
-            d.intention !== '' ? d.intention : d.isFlow ? 'Flow block' : 'Focus block',
+            d.intention !== '' ? `Focus Topic: ${d.intention}` : d.isFlow ? 'Flow block' : 'Focus block',
             d.isPaused
               ? 'Paused. The clock waits until you resume'
               : d.isFlow
@@ -480,6 +483,17 @@ export const register: Register = (on, options) => {
       )),
     )
 
+    // Whether blocks silence the desktop's notifications, chosen here.
+    const silence =
+      v.silence === null ? (
+        <Text dimColor>This desktop's notifications can't be silenced from here. A block start command in the settings can do it.</Text>
+      ) : (
+        even(
+          <Button key="silence-on" label="Silence notifications" variant={v.silence ? 'primary' : 'secondary'} dimColor={!v.silence} onPress={() => void f.setSilence(true)} />,
+          <Button key="silence-off" label="Keep them on" variant={v.silence ? 'secondary' : 'primary'} dimColor={v.silence} onPress={() => void f.setSilence(false)} />,
+        )
+      )
+
     // Where blocks go: connected, or a field to connect it, instead of pointing at a settings screen.
     const vault = v.needsVault ? (
       <Box flexDirection="column" gap={1}>
@@ -496,7 +510,7 @@ export const register: Register = (on, options) => {
         {now}
         {parked}
         {stats}
-        {card('Background noise', 'A steady bed of sound, quiet during breaks', noise, vault)}
+        {card('Sound and notifications', 'Noise goes quiet in breaks. Silencing lifts when the block ends', noise, silence, vault)}
       </Box>
     )
   })

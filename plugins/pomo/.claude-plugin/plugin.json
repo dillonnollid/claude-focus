@@ -128,8 +128,8 @@
     },
     "focusSwitch": {
       "type": "string",
-      "title": "Focus switch",
-      "description": "auto silences desktop notifications for each focus block (mako on Omarchy and other wlroots desktops, GNOME's banners) and brings them back for the break. off leaves them alone.",
+      "title": "Silence notifications in blocks",
+      "description": "auto silences desktop notifications for each focus block (Omarchy's shell, mako, SwayNC, dunst or GNOME) and brings them back for the break. off leaves them alone. The dashboard's own switch overrides this once you use it.",
       "default": "auto",
       "options": [
         "auto",

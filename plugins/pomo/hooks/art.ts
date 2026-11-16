@@ -54,6 +54,8 @@ export type RingArgs = {
   /** Which block of the set this is, from 1, and how many make a set; 0 hides the pips. */
   round: number
   rounds: number
+  /** How far ahead to animate the arc, in milliseconds; 0 draws it still. */
+  moveMs: number
 }
 
 // Both cards share one width, so the pane stretches them to the same scale.
@@ -68,10 +70,11 @@ const LEN = 2 * Math.PI * R
  * The ring for one moment: the lit arc is the time left, burning away
  * clockwise from the top, and the middle says it in whole minutes.
  *
- * Nothing in it moves with the clock. The app redraws an image whenever it
- * likes (a window switch, a tab change) and restarts its animations, so a
- * drawing that counted down by itself showed the time it was drawn at. This
- * one is drawn afresh each minute instead, and only the ember's glow moves.
+ * The arc moves smoothly, but only a short way ahead (`moveMs`): the app
+ * redraws an image whenever it likes (a window switch, a tab change) and
+ * restarts its animations, so a drawing that ran the whole block showed the
+ * time it was drawn at. pomo draws a fresh one every ten seconds, so a
+ * restart puts the arc back by seconds at most, and the minutes never lie.
  */
 export function ringSvg(a: RingArgs): string {
   const length = Math.max(1, a.lengthMs)
@@ -86,22 +89,31 @@ export function ringSvg(a: RingArgs): string {
   const big = minutes === -1 ? '<1' : String(minutes)
   const unit = a.phase === 'idle' ? 'minute block' : a.isCountUp ? (minutes === 1 ? 'minute in' : 'minutes in') : minutes === 1 ? 'minute left' : 'minutes left'
 
+  // Where the arc will be when this drawing's motion ends, and how long it takes to get there.
+  const f1 = a.moveMs > 0 ? Math.min(1, (a.elapsedMs + a.moveMs) / length) : f0
+  const moveS = f1 > f0 ? ((f1 - f0) * length) / 1000 : 0
+  const css =
+    moveS > 0
+      ? `.arc { animation: arc ${moveS.toFixed(2)}s linear forwards; } @keyframes arc { to { ${a.isCountUp ? `stroke-dasharray: ${(LEN * f1).toFixed(2)} ${LEN.toFixed(1)}` : `stroke-dashoffset: ${(-LEN * f1).toFixed(2)}`}; } }
+.tip { transform-origin: ${CX}px ${CY}px; animation: tip ${moveS.toFixed(2)}s linear forwards; } @keyframes tip { from { transform: rotate(0deg); } to { transform: rotate(${(360 * (f1 - f0)).toFixed(3)}deg); } }`
+      : ''
+
   // Counting down, the lit arc is what's left; flow's grows toward its mark.
   const arc =
     a.phase === 'idle'
       ? `stroke-dasharray="${LEN.toFixed(1)}"`
       : a.isCountUp
-        ? `stroke-dasharray="${(LEN * f0).toFixed(1)} ${LEN.toFixed(1)}"`
-        : `stroke-dasharray="${LEN.toFixed(1)} ${LEN.toFixed(1)}" stroke-dashoffset="${(-LEN * f0).toFixed(1)}"`
+        ? `stroke-dasharray="${(LEN * f0).toFixed(2)} ${LEN.toFixed(1)}" class="arc"`
+        : `stroke-dasharray="${LEN.toFixed(1)} ${LEN.toFixed(1)}" stroke-dashoffset="${(-LEN * f0).toFixed(2)}" class="arc"`
 
   // The tip: a coal with a soft halo while you focus, a plain bead otherwise.
   const isLit = a.phase === 'focus'
   const tip =
     a.phase === 'idle'
       ? `<circle cx="${CX}" cy="${CY - R}" r="5" fill="${CHAR}" stroke="${ASH}" stroke-width="1.5"/>`
-      : `<g transform="rotate(${(360 * (a.isCountUp ? Math.min(1, f0) : f0)).toFixed(2)} ${CX} ${CY})">${
+      : `<g transform="rotate(${(360 * f0).toFixed(3)} ${CX} ${CY})"><g class="tip">${
           isLit ? `<circle cx="${CX}" cy="${CY - R}" r="19" fill="url(#halo)" class="halo"/>` : ''
-        }<circle cx="${CX}" cy="${CY - R}" r="${isLit ? 6 : 5}" fill="${isLit ? '#fff3d6' : a.phase === 'break' ? BONE : ASH}"/></g>`
+        }<circle cx="${CX}" cy="${CY - R}" r="${isLit ? 6 : 5}" fill="${isLit ? '#fff3d6' : a.phase === 'break' ? BONE : ASH}"/></g></g>`
   const pips =
     a.rounds > 1 && a.rounds <= 8
       ? Array.from({ length: a.rounds }, (_, i) => {
@@ -125,6 +137,7 @@ ${EDGE}
 <style>
 .halo { animation: flicker 2.6s ease-in-out infinite; } @keyframes flicker { 0%, 100% { opacity: 0.6; } 50% { opacity: 1; } }
 .warm { animation: breathe 7s ease-in-out infinite; } @keyframes breathe { 0%, 100% { opacity: 0.55; } 50% { opacity: 1; } }
+${css}
 @media (prefers-reduced-motion: reduce) { .halo, .warm { animation: none; } }
 </style>
 ${card(W, H, 26)}

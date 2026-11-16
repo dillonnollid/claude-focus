@@ -180,7 +180,16 @@ function shiftDay(key: string, by: number): string {
 }
 
 /** The commands the focus switch runs, worked out once per session. */
-type SwitchPlan = { on: string[][]; off: string[][]; label: string; canFullscreen: boolean }
+type SwitchPlan = {
+  /** The desktop's do-not-disturb, when pomo found one it can drive; `isOn` asks whether it is on already. */
+  quiet?: { on: string[][]; off: string[][]; isOn?: string[] }
+  /** The person's own start and end commands. */
+  custom: { on: string[][]; off: string[][] }
+  canFullscreen: boolean
+}
+
+/** What the switch has done for the block that's running, kept in the store. */
+type SwitchState = { on?: boolean; quieted?: boolean; address?: string }
 
 const isFocusing = (t: Timer) => t.phase === 'focus'
 
@@ -432,41 +441,67 @@ export function createFocus(io: Io, s: Settings) {
   // length of a focus block. Worked out once from what this computer has.
   const has = async (tool: string) => (await io.run(['sh', '-c', `command -v ${tool}`]).catch(() => ({ exitCode: 1, stdout: '' }))).exitCode === 0
 
+  const stdoutOf = async (argv: string[]) => (await io.run(argv).catch(() => ({ exitCode: 1, stdout: '' }))).stdout.trim()
+
+  /** The notification daemon on this computer that pomo knows how to quiet, if any. */
+  const findQuiet = async (): Promise<SwitchPlan['quiet']> => {
+    // Omarchy's own shell draws its notifications now; mako was its daemon before.
+    if ((await has('omarchy-shell')) && (await stdoutOf(['omarchy-shell', 'notifications', 'ping'])) === 'ok') {
+      const refresh = ['omarchy-shell', '-q', 'omarchy.indicators', 'refresh']
+
+      return {
+        on: [['omarchy-shell', 'notifications', 'setDnd', 'on'], refresh],
+        off: [['omarchy-shell', 'notifications', 'setDnd', 'off'], refresh],
+        isOn: ['omarchy-shell', 'notifications', 'isDnd'],
+      }
+    }
+
+    if (await has('makoctl')) {
+      return { on: [['makoctl', 'mode', '-a', 'do-not-disturb']], off: [['makoctl', 'mode', '-r', 'do-not-disturb']] }
+    }
+
+    if (await has('swaync-client')) {
+      return { on: [['swaync-client', '-dn']], off: [['swaync-client', '-df']] }
+    }
+
+    if (await has('dunstctl')) {
+      return { on: [['dunstctl', 'set-paused', 'true']], off: [['dunstctl', 'set-paused', 'false']] }
+    }
+
+    // GNOME's setting only means something on GNOME.
+    if (/gnome/i.test(await stdoutOf(['sh', '-c', 'printf %s "$XDG_CURRENT_DESKTOP"'])) && (await has('gsettings'))) {
+      return {
+        on: [['gsettings', 'set', 'org.gnome.desktop.notifications', 'show-banners', 'false']],
+        off: [['gsettings', 'set', 'org.gnome.desktop.notifications', 'show-banners', 'true']],
+      }
+    }
+
+    return undefined
+  }
+
   const getPlan = async (): Promise<SwitchPlan> => {
     if (plan !== undefined) {
       return plan
     }
 
-    const on: string[][] = []
-    const off: string[][] = []
-    let label = ''
-
-    if (s.focusSwitch === 'auto' && !(await io.isCloud())) {
-      if (await has('makoctl')) {
-        on.push(['makoctl', 'mode', '-a', 'do-not-disturb'])
-        off.push(['makoctl', 'mode', '-r', 'do-not-disturb'])
-        label = 'Notifications silenced'
-      } else if (await has('gsettings')) {
-        on.push(['gsettings', 'set', 'org.gnome.desktop.notifications', 'show-banners', 'false'])
-        off.push(['gsettings', 'set', 'org.gnome.desktop.notifications', 'show-banners', 'true'])
-        label = 'Notifications silenced'
-      }
+    const isLocal = !(await io.isCloud())
+    plan = {
+      quiet: isLocal ? await findQuiet() : undefined,
+      custom: {
+        on: s.startCommand === '' ? [] : [['sh', '-c', s.startCommand]],
+        off: s.endCommand === '' ? [] : [['sh', '-c', s.endCommand]],
+      },
+      canFullscreen: s.fullscreen && isLocal && (await has('hyprctl')),
     }
-
-    if (s.startCommand !== '') {
-      on.push(['sh', '-c', s.startCommand])
-      label ||= 'Focus commands ran'
-    }
-
-    if (s.endCommand !== '') {
-      off.push(['sh', '-c', s.endCommand])
-    }
-
-    const canFullscreen = s.fullscreen && !(await io.isCloud()) && (await has('hyprctl'))
-
-    plan = { on, off, label: canFullscreen && label === '' ? 'Fullscreen' : label, canFullscreen }
 
     return plan
+  }
+
+  /** Whether to silence notifications in blocks: the dashboard's choice, else the setting. */
+  const silencePref = async (): Promise<boolean> => {
+    const chosen = await io.get('silence')
+
+    return typeof chosen === 'boolean' ? chosen : s.focusSwitch !== 'off'
   }
 
   /** Maximizes the Claude window on Hyprland, if Claude is the window in front. */
@@ -508,44 +543,81 @@ export function createFocus(io: Io, s: Settings) {
     await io.run(['hyprctl', '--batch', `dispatch focuswindow address:${address} ; dispatch fullscreen 1`]).catch(() => undefined)
   }
 
-  /** Turns the switch on for a focus block and off for anything else, once. */
+  const runAll = async (list: string[][]) => {
+    for (const argv of list) {
+      await io.run(argv).catch(() => undefined)
+    }
+  }
+
+  /**
+   * Turns the switch on for a focus block and off for anything else, each part
+   * once: the person's commands and fullscreen, and do-not-disturb when they
+   * chose it. Do-not-disturb that was on before the block is left alone.
+   */
   const applySwitch = async (t: Timer): Promise<string> => {
     const p = await getPlan()
+    const want = isFocusing(t)
+    const wantQuiet = want && p.quiet !== undefined && (await silencePref())
+    const state = ((await io.get('switch')) ?? {}) as SwitchState
+    const next: SwitchState = { ...state }
+    const lines: string[] = []
 
-    if (p.on.length === 0 && p.off.length === 0 && !p.canFullscreen) {
-      return ''
+    if (want && state.on !== true) {
+      await runAll(p.custom.on)
+      next.address = p.canFullscreen ? await fullscreenOn() : undefined
+      next.on = true
+    } else if (!want && state.on === true) {
+      await runAll(p.custom.off)
+
+      if (state.address !== undefined) {
+        await fullscreenOff(state.address)
+      }
+
+      next.on = false
+      next.address = undefined
     }
 
-    const want = isFocusing(t)
-    const state = ((await io.get('switch')) ?? { on: false }) as { on?: boolean; address?: string }
+    if (p.quiet !== undefined) {
+      if (wantQuiet && state.quieted !== true) {
+        const isOnAlready = p.quiet.isOn !== undefined && (await stdoutOf(p.quiet.isOn)) === 'on'
 
-    if (state.on === want) {
-      return want ? p.label : ''
+        if (!isOnAlready) {
+          await runAll(p.quiet.on)
+          next.quieted = true
+        }
+      } else if (!wantQuiet && state.quieted === true) {
+        await runAll(p.quiet.off)
+        next.quieted = false
+      }
+    }
+
+    if (JSON.stringify(next) !== JSON.stringify(state)) {
+      await io.set('switch', next)
     }
 
     if (want) {
-      for (const argv of p.on) {
-        await io.run(argv).catch(() => undefined)
+      if (wantQuiet) {
+        lines.push('Notifications silenced')
       }
 
-      const address = p.canFullscreen ? await fullscreenOn() : undefined
-      await io.set('switch', address === undefined ? { on: true } : { on: true, address })
+      if (p.custom.on.length > 0) {
+        lines.push('Focus commands ran')
+      }
 
-      return p.label
+      if (next.address !== undefined) {
+        lines.push('Fullscreen')
+      }
     }
 
-    for (const argv of p.off) {
-      await io.run(argv).catch(() => undefined)
-    }
-
-    if (state.address !== undefined) {
-      await fullscreenOff(state.address)
-    }
-
-    await io.set('switch', { on: false })
-
-    return ''
+    return lines.join(', ')
   }
+
+  /** Chooses whether blocks silence notifications, and applies it to a block that's running. */
+  const setSilence = (value: boolean) =>
+    locked(async () => {
+      await io.set('silence', value)
+      io.toast(value ? 'Notifications will be silenced during blocks.' : 'Notifications stay on during blocks.', 4000)
+    }).then(() => sync())
 
   /** Counts a finished focus block once, however many sessions saw it end. */
   const recordFocus = async (ended: Extract<Ended, { kind: 'focus-done' }>, isLate: boolean, after: Saved) => {
@@ -631,6 +703,7 @@ export function createFocus(io: Io, s: Settings) {
         : null
     const parked = (await loadParked()).filter(p => !p.isDone).slice(-8)
     const switchLine = await applySwitch(saved.timer).catch(() => '')
+    const canSilence = (await getPlan().catch(() => undefined))?.quiet !== undefined
     const vault = await getVault()
 
     shown = {
@@ -650,13 +723,17 @@ export function createFocus(io: Io, s: Settings) {
       checkIn,
       parked,
       switchLine,
+      silence: canSilence ? await silencePref() : null,
     }
     applyNoise(saved.timer)
 
     // The ring runs its own clock, so a tick that changes nothing a person
     // can read draws nothing: the dashboard only redraws when it has news.
     const t = saved.timer
-    const face = JSON.stringify([{ ...shown, now: 0 }, formatLeft(remaining(t, now), s.showSeconds), Math.floor(elapsed(t, now) / MIN)])
+    // While the clock runs the ring is drawn afresh every ten seconds, so it
+    // keeps moving smoothly and a restarted animation is off by seconds at most.
+    const isRunning = t.phase === 'focus' || t.phase === 'break'
+    const face = JSON.stringify([{ ...shown, now: 0 }, formatLeft(remaining(t, now), s.showSeconds), Math.floor(elapsed(t, now) / MIN), isRunning ? Math.floor(now / 10_000) : 0])
 
     if (face !== drawn) {
       drawn = face
@@ -1172,6 +1249,7 @@ export function createFocus(io: Io, s: Settings) {
     setNoise,
     park,
     clearParked,
+    setSilence,
     askParked,
     setVaultPath,
     answerCheckIn,

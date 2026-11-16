@@ -63,6 +63,8 @@ export type View = {
   parked: Parked[]
   /** What the focus switch is doing, or empty when it's off. */
   switchLine: string
+  /** Whether blocks silence notifications; null where pomo can't silence this desktop's. */
+  silence: boolean | null
 }
 
 declare module 'claude-code' {

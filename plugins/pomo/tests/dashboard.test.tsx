@@ -45,7 +45,7 @@ async function ringNow(pane: Mounted): Promise<string> {
 }
 
 /** The engine beneath the plugin. `ran` collects every command it runs. */
-function engine(on: On, opts: { isCloud?: boolean; tools?: string[]; isPlaced?: boolean; store?: Record<string, unknown> } = {}) {
+function engine(on: On, opts: { isCloud?: boolean; tools?: string[]; isPlaced?: boolean; store?: Record<string, unknown>; replies?: Record<string, string> } = {}) {
   const clock = mock.clock(on, { now: START })
   const ran: string[] = []
   const toasts: string[] = []
@@ -58,7 +58,7 @@ function engine(on: On, opts: { isCloud?: boolean; tools?: string[]; isPlaced?: 
     const tool = /^sh -c command -v (\S+)$/.exec(line)?.[1]
     const isThere = tool !== undefined && (opts.tools ?? []).includes(tool)
 
-    return { value: { exitCode: tool === undefined || isThere ? 0 : 1, stdout: '', ...RAN } }
+    return { value: { exitCode: tool === undefined || isThere ? 0 : 1, stdout: opts.replies?.[line] ?? '', ...RAN } }
   })
   on('command.register', (_, e) => ({ value: { command: e.name } }))
   on('ui.open', () =>
@@ -129,20 +129,20 @@ test('the dashboard draws on every surface, starts from a preset, counts down, p
   expect(drawnAtStart).toContain('<title>Focus 50:00</title>')
   expect(drawnAtStart).toContain('>50<')
   expect(drawnAtStart).toContain('minutes left')
-  expect((await pane.find({ type: 'Text', text: /CV intro/ }))?.text).toBe('CV intro')
+  expect((await pane.find({ type: 'Text', text: /CV intro/ }))?.text).toBe('Focus Topic: CV intro')
 
-  // The drawing holds no countdown of its own: the app restarts an image's
-  // animations whenever it redraws it (a window or tab switch), and a clock
-  // that ran by itself then showed the time it was drawn at.
-  expect(drawnAtStart).not.toMatch(/@keyframes (arc|tip|m10|m1|s10|s1)\b/)
+  // The arc moves smoothly, but only twenty seconds ahead: the app restarts an
+  // image's animations whenever it redraws it (a window or tab switch), and a
+  // drawing that ran the whole block then showed the time it was drawn at.
+  expect(drawnAtStart).toMatch(/animation: arc 20\.00s linear forwards/)
 
-  // So it is drawn afresh each minute, and left alone within one.
+  // So a fresh one comes every ten seconds, and the minutes are always right.
   await clock.advance(90_000)
   const atNinety = await ring(pane)
   expect(atNinety).toContain('>49<')
+  expect(atNinety).not.toBe(drawnAtStart)
   expect(await ringNow(pane)).toBe('Focus, 49 min left')
   await clock.advance(20_000)
-  expect(await ring(pane)).toBe(atNinety)
 
   await pane.press({ key: 'pause' })
   await clock.advance(60_000)
@@ -292,4 +292,55 @@ test('blocks finished before minutes were counted get their minutes back, once',
   await $.session.start({ cwd: '/work', surface: 'desktop', isInteractive: true })
 
   expect((await run($, 'pomo', 'status')).text).toContain('Today 3 of 8 blocks, 75 min')
+})
+
+test('on Omarchy the block turns on do-not-disturb, and the dashboard can say no', async ($, on) => {
+  const { ran } = engine(on, {
+    isCloud: false,
+    tools: ['omarchy-shell', 'gsettings'],
+    replies: { 'omarchy-shell notifications ping': 'ok', 'omarchy-shell notifications isDnd': 'off' },
+  })
+  await $.session.start({ cwd: '/work', surface: 'desktop', isInteractive: true })
+
+  await run($, 'pomo', 'start')
+  expect(ran).toContain('omarchy-shell notifications setDnd on')
+  // GNOME's setting is left alone on a desktop that isn't GNOME.
+  expect(ran.some(line => line.startsWith('gsettings'))).toBe(false)
+
+  const pane = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  expect((await pane.find({ key: 'silence-on' }))?.props.variant).toBe('primary')
+  await pane.press({ key: 'silence-off' })
+  expect(ran).toContain('omarchy-shell notifications setDnd off')
+  expect((await pane.find({ key: 'silence-off' }))?.props.variant).toBe('primary')
+
+  // Kept off for the next block too.
+  await run($, 'pomo', 'stop')
+  await run($, 'pomo', 'start')
+  expect(ran.filter(line => line === 'omarchy-shell notifications setDnd on')).toHaveLength(1)
+  await pane.unmount()
+})
+
+test('do-not-disturb the person had on before the block stays on after it', async ($, on) => {
+  const { ran } = engine(on, {
+    isCloud: false,
+    tools: ['omarchy-shell'],
+    replies: { 'omarchy-shell notifications ping': 'ok', 'omarchy-shell notifications isDnd': 'on' },
+  })
+  await $.session.start({ cwd: '/work', surface: 'desktop', isInteractive: true })
+
+  await run($, 'pomo', 'start')
+  await run($, 'pomo', 'stop')
+  expect(ran.some(line => line.includes('setDnd'))).toBe(false)
+})
+
+test('with nothing it can silence, the dashboard says so instead of claiming it did', async ($, on) => {
+  engine(on, { isCloud: false, tools: ['gsettings'] })
+  await $.session.start({ cwd: '/work', surface: 'desktop', isInteractive: true })
+  await run($, 'pomo', 'start')
+
+  const pane = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  expect(await pane.find({ key: 'silence-on' })).toBeUndefined()
+  expect((await pane.find({ type: 'Text', text: /can't be silenced from here/ }))?.text).toBeDefined()
+  expect(await pane.find({ type: 'Text', text: /Notifications silenced/ })).toBeUndefined()
+  await pane.unmount()
 })

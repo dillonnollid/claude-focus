@@ -34,7 +34,7 @@ The values live in `plugins/pomo/hooks/art.ts`, `plugins/ember-theme/hooks/regis
 
 1. **Lit and ash.** Solid ember is live or done. Dotted kindling is waiting or spent. The ring's burnt stretch, an unlit coal and an empty day are all dotted for the same reason.
 2. **Heat is the hierarchy.** Gold marks a single point at a time. Ember marks what matters now. Cinder marks what is over. If two things on one card are gold, one of them is wrong.
-3. **Only fire moves.** The tip flickers, the coals breathe, sparks rise. Cards, buttons and text hold still. Every animation stops under the system's reduce-motion setting. No animation carries the time: the app restarts a drawing's animations whenever it redraws it, so the clock is drawn afresh each minute instead.
+3. **Only fire moves.** The tip flickers, the coals breathe, sparks rise. Cards, buttons and text hold still. Every animation stops under the system's reduce-motion setting. No animation carries the time for long: the app restarts a drawing's animations whenever it redraws it, so the arc moves only twenty seconds ahead and a fresh drawing comes every ten.
 4. **Rest is green and still.** A break swaps the heat for moss and turns the flicker off. The change of colour is the cue to step away.
 5. **One drawing per state.** A drawing is built when the timer changes and then runs by itself on CSS. Nothing redraws on a tick, so nothing blinks.
 6. **Plain words.** Sentence case. A button says what it does and the toast that follows uses the same word: *park* gives *Parked*. Empty states say what to do next.
