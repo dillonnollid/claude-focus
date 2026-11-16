@@ -32,14 +32,14 @@ type Mounted = {
 
 /** The ring's SVG text on a surface that draws it: its title says what it was drawn as. */
 async function ring(pane: Mounted): Promise<string> {
-  const svg = (await pane.findAll({ type: 'Svg' })).find(found => !String(found.props.alt).startsWith('Cinder'))
+  const svg = await pane.find({ type: 'Svg' })
 
   return String(svg?.props.source ?? '')
 }
 
 /** What the ring says now, in words: the drawing itself animates between redraws. */
 async function ringNow(pane: Mounted): Promise<string> {
-  const svg = (await pane.findAll({ type: 'Svg' })).find(found => !String(found.props.alt).startsWith('Cinder'))
+  const svg = await pane.find({ type: 'Svg' })
 
   return String(svg?.props.alt ?? '')
 }
@@ -103,15 +103,15 @@ test('the dashboard draws on every surface, starts from a preset, counts down, p
   // The terminal draws text; the apps draw the ring and the stats as SVG.
   const term = await $.ui.mount({ ...PANE, surface: 'terminal' })
   expect((await term.find({ type: 'Text', text: /^Ready/ }))?.text).toContain('0 of 8 today')
-  expect((await term.find({ key: 'start' }))?.text).toBe('▶ 25 min')
+  expect((await term.find({ key: 'start' }))?.text).toBe('25 min')
   await term.unmount()
 
   for (const surface of ['desktop', 'mobile'] as const) {
     const pane = await $.ui.mount({ ...PANE, surface })
     expect(await ring(pane)).toContain('<title>Ready 25:00</title>')
-    expect((await pane.find({ key: 'start-50' }))?.text).toBe('▶▶ 50 min')
-    expect((await pane.find({ key: 'start-flow' }))?.text).toBe('∞ Flow')
-    expect((await pane.find({ key: 'noise-brown' }))?.text).toBe('▁ Brown')
+    expect((await pane.find({ key: 'start-50' }))?.text).toBe('50 min')
+    expect((await pane.find({ key: 'start-flow' }))?.text).toBe('Flow')
+    expect((await pane.find({ key: 'noise-brown' }))?.text).toBe('Brown')
     await pane.unmount()
   }
 
@@ -127,8 +127,7 @@ test('the dashboard draws on every surface, starts from a preset, counts down, p
   await pane.press({ key: 'start-50' })
   const drawnAtStart = await ring(pane)
   expect(drawnAtStart).toContain('<title>Focus 50:00</title>')
-  const cinder = (await pane.findAll({ type: 'Svg' })).find(found => String(found.props.alt).startsWith('Cinder'))
-  expect(String(cinder?.props.source)).toContain('typing away')
+  expect(drawnAtStart).toContain('>CV intro<')
   await clock.advance(90_000)
   // One drawing serves the whole block: it runs its own clock, so nothing
   // swaps it mid-block. That swap is what made the clock blink.
@@ -165,7 +164,7 @@ test(
     expect(toasts.at(-1)).toContain('Parked')
     expect(await pane.find({ key: 'park-0' })).toBeUndefined()
     expect(await pane.find({ key: 'park-1' })).toBeDefined()
-    expect((await pane.find({ type: 'Text', text: /reply to Sam/ }))?.text).toBe('· reply to Sam about Friday')
+    expect((await pane.find({ type: 'Text', text: /reply to Sam/ }))?.text).toBe('reply to Sam about Friday')
     expect((await run($, 'park', 'look up flights')).text).toContain('Parked')
 
     // The same thought twice is parked once.

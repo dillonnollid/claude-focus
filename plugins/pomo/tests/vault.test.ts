@@ -154,7 +154,7 @@ test(
     expect(today.endsWith('## Parked\n\n- book the dentist\n')).toBe(true)
 
     const pane = await $.ui.mount(PANE)
-    expect((await pane.find({ type: 'Text', text: /Connected to your/ }))?.text).toBe('✓ Connected to your notes vault')
+    expect((await pane.find({ type: 'Text', text: /Connected to your/ }))?.text).toBe('Connected to your notes vault')
     expect(await pane.find({ key: 'vault' })).toBeUndefined()
     await pane.unmount()
   },

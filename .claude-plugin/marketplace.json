@@ -10,12 +10,12 @@
     {
       "name": "pomo",
       "source": "./plugins/pomo",
-      "description": "A pixel-art focus dashboard beside the chat: Cinder the ember shows what you're doing, a ring burns down segment by segment, plus a parking lot for stray thoughts, your day and week, noise, chimes and logging to your Obsidian daily note."
+      "description": "A focus dashboard beside the chat: a ring that burns down as the block runs, a parking lot for stray thoughts, a coal lit for every finished block, noise, chimes and logging to your Obsidian daily note."
     },
     {
       "name": "ember-theme",
       "source": "./plugins/ember-theme",
-      "description": "A warm, dark-only theme for long sessions: quiet warm-neutral surfaces, one ember-orange accent, and a faint ASCII field at the window's edges that follows the pomo timer. No blue anywhere."
+      "description": "A warm, dark-only theme for long sessions. Mahogany, bone and the colours of a fire, over a hearth that glows at the foot of the window. No blue anywhere."
     }
   ]
 }

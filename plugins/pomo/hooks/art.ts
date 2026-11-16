@@ -1,31 +1,37 @@
-// The dashboard's drawings, as SVG text: the timer ring and the day's card,
-// in chunky pixel art. Each carries its own card, so it reads the same over
-// any theme. DESIGN.md at the repository root says why they look this way.
+// The dashboard's drawings, as SVG text: the timer ring and the day's card.
+// Each carries its own dark card, so it reads the same over any theme. The
+// markup is drawn at twice its size so the pane can stretch it to its width.
 //
-// The ring is drawn once per change of the timer and then runs by itself:
-// sixty pixel segments go out one by one as the block burns down, the one
-// burning now glows, and the pixel digits roll on CSS steps. Nothing in it
-// needs the plugin again until the timer changes, so the dashboard never has
-// to swap the drawing mid-block, which is what made the old clock blink.
+// They follow the Hearth design system (DESIGN.md at the repository root):
+//   lit and ash   solid ember is live or done; dotted kindling is waiting or spent
+//   heat          gold marks the one live point, ember what counts, cinder the past
+//   only fire moves   the tip flickers and the coals breathe; nothing else does
+//   rest is green     a break swaps the heat for moss and holds still
+//
+// The ring is drawn once per change of the timer and then runs by itself: a
+// block burns down like a stick of incense, the lit arc shrinking behind a
+// glowing tip, and the digits roll on CSS steps. Nothing in it needs the
+// plugin again until the timer changes, so the dashboard never has to swap
+// the drawing mid-block, which is what made the old clock blink.
 
-// The palette. ember-theme's register.ts holds the same values.
-const CARD = '#211814'
-const HAIR = 'rgba(244, 232, 214, 0.09)'
-const TRACK = 'rgba(244, 232, 214, 0.15)'
-const TEXT = '#f4e8d6'
-const SECOND = '#cdb9a2'
-const MUTED = '#ab9784'
+// The Hearth palette. ember-theme's register.tsx holds the same values.
+const CHAR = '#22140f'
+const KINDLING = '#47291b'
+const BONE = '#f6e7cf'
+const ASH = '#b89c84'
+const GOLD = '#ffcf70'
 const EMBER = '#ff7a1f'
-const LIGHT = '#ffb37a'
+const CINDER = '#9a431d'
+const GARNET = '#d93a1a'
 const MOSS = '#b3c95a'
-const MOSS_LIGHT = '#dbe8a0'
-const PAST = '#46352b'
-const MONO = "ui-monospace, 'JetBrains Mono', 'SF Mono', Menlo, Consolas, monospace"
+const FONT = "ui-rounded, 'SF Pro Rounded', system-ui, -apple-system, 'Segoe UI', sans-serif"
 
-/** A card's ground: a flat surface with a hairline edge. */
-function card(width: number, height: number): string {
-  return `<rect x="0.5" y="0.5" width="${width - 1}" height="${height - 1}" rx="11.5" fill="${CARD}" stroke="${HAIR}"/>`
+/** A card's ground: char, with a hairline of light along its top edge. */
+function card(width: number, height: number, rx: number): string {
+  return `<rect width="${width}" height="${height}" rx="${rx}" fill="${CHAR}"/><rect x="0.5" y="0.5" width="${width - 1}" height="${height - 1}" rx="${rx - 0.5}" fill="none" stroke="url(#edge)"/>`
 }
+
+const EDGE = `<linearGradient id="edge" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${BONE}" stop-opacity="0.13"/><stop offset="0.5" stop-color="${BONE}" stop-opacity="0.02"/><stop offset="1" stop-color="${BONE}" stop-opacity="0.04"/></linearGradient>`
 
 function esc(text: string): string {
   return text.replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c] ?? c)
@@ -42,40 +48,10 @@ export function clockText(totalSeconds: number): string {
   return `${Math.floor(t / 60).toString().padStart(2, '0')}:${(t % 60).toString().padStart(2, '0')}`
 }
 
-// A 5 by 7 pixel font for the digits, one string of rows per digit.
-const FONT: Record<string, string> = {
-  '0': '01110 10001 10001 10001 10001 10001 01110',
-  '1': '00100 01100 00100 00100 00100 00100 01110',
-  '2': '01110 10001 00001 00010 00100 01000 11111',
-  '3': '11110 00001 00001 01110 00001 00001 11110',
-  '4': '00010 00110 01010 10010 11111 00010 00010',
-  '5': '11111 10000 11110 00001 00001 10001 01110',
-  '6': '00110 01000 10000 11110 10001 10001 01110',
-  '7': '11111 00001 00010 00100 01000 01000 01000',
-  '8': '01110 10001 10001 01110 10001 10001 01110',
-  '9': '01110 10001 10001 01111 00001 00010 01100',
-}
-
-const P = 5
-
-/** Path data for one digit with its top left at x, y. */
-function glyph(digit: string, x: number, y: number): string {
-  const rows = (FONT[digit] ?? FONT['0'] ?? '').split(' ')
-  let d = ''
-
-  rows.forEach((row, r) => {
-    for (const m of row.matchAll(/1+/g)) {
-      d += `M${x + (m.index ?? 0) * P} ${y + r * P}h${m[0].length * P}v${P}h-${m[0].length * P}z`
-    }
-  })
-
-  return d
-}
-
 export type RingArgs = {
   phase: 'idle' | 'focus' | 'break' | 'paused'
   label: string
-  /** A line under the time; empty for none. */
+  /** What the block is for, or a hint; drawn under the time. */
   sub: string
   /** Milliseconds the block has run. */
   elapsedMs: number
@@ -93,25 +69,27 @@ export type RingArgs = {
 const W = 280
 const H = 264
 const CX = W / 2
-const CY = 132
-const R = 100
-const N = 60
+const CY = H / 2
+const R = 96
+const LEN = 2 * Math.PI * R
 // The digits: one cell each, so they never shuffle sideways as they change.
-const TOP = CY - 18
-const LINE = 44
-const X = { m10: CX - 68, m1: CX - 38, colon: CX - 3, s10: CX + 13, s1: CX + 43 }
+const BASE = CY + 19
+const LINE = 64
+const CELL = 33
+const X = { m10: CX - 9 - CELL * 1.5, m1: CX - 9 - CELL / 2, s10: CX + 9 + CELL / 2, s1: CX + 9 + CELL * 1.5 }
 
 /**
- * A column of digits that steps to the next every `stepS` seconds, already
+ * A column of glyphs that steps to the next every `stepS` seconds, already
  * `into` seconds along. A looping one goes round; any other stops on its last.
  */
-function column(id: string, x: number, digits: readonly string[], stepS: number, into: number, isLoop: boolean) {
-  const n = digits.length
-  const all = isLoop ? digits : [...digits, digits[n - 1] ?? '0']
+function column(id: string, x: number, glyphs: readonly string[], stepS: number, into: number, isLoop: boolean) {
+  const n = glyphs.length
+  const all = isLoop ? glyphs : [...glyphs, glyphs[n - 1] ?? '']
+  const texts = all.map((g, i) => `<text x="${x}" y="${BASE + i * LINE}" class="d">${g}</text>`).join('')
 
   return {
     css: `@keyframes ${id} { to { transform: translateY(-${n * LINE}px); } } .${id} { animation: ${id} ${n * stepS}s steps(${n}) ${isLoop ? 'infinite' : '1 forwards'}; animation-delay: -${into.toFixed(3)}s; }`,
-    svg: `<g class="${id}"><path d="${all.map((g, i) => glyph(g, x, TOP + i * LINE)).join('')}"/></g>`,
+    svg: `<g class="${id}">${texts}</g>`,
   }
 }
 
@@ -121,12 +99,12 @@ function liveDigits(seconds: number, isCountUp: boolean): { css: string; svg: st
   const shown = isCountUp ? Math.floor(seconds) : Math.ceil(seconds)
   const part = isCountUp ? seconds - shown : shown - seconds
   const up = (n: number) => Array.from({ length: n }, (_, i) => String(i))
-  const order = (digits: string[]) => (isCountUp ? digits : digits.reverse())
+  const order = (glyphs: string[]) => (isCountUp ? glyphs : glyphs.reverse())
   // Where each column stands in its own cycle of `period` seconds.
   const into = (period: number) => (isCountUp ? shown % period : period - 1 - (shown % period)) + part
   const tens = Math.floor(shown / 600)
   // Counting down, the tens of minutes run out at zero; counting up, five hours is plenty.
-  const tensList = isCountUp ? Array.from({ length: 30 }, (_, i) => String((tens + i) % 10)) : Array.from({ length: tens + 1 }, (_, i) => String(tens - i))
+  const tensList = isCountUp ? Array.from({ length: 30 }, (_, i) => String(tens + i)) : Array.from({ length: tens + 1 }, (_, i) => String(tens - i))
   const cols = [
     column('m10', X.m10, tensList, 600, into(600), false),
     column('m1', X.m1, order(up(10)), 60, into(600), true),
@@ -140,77 +118,61 @@ function liveDigits(seconds: number, isCountUp: boolean): { css: string; svg: st
 function stillDigits(text: string): string {
   const [m = '00', s = '00'] = text.split(':')
 
-  return `<path d="${glyph(m.slice(-2, -1) || '0', X.m10, TOP)}${glyph(m.slice(-1), X.m1, TOP)}${glyph(s[0] ?? '0', X.s10, TOP)}${glyph(s[1] ?? '0', X.s1, TOP)}"/>`
+  return [
+    `<text x="${X.m10}" y="${BASE}" class="d">${m.slice(0, -1)}</text>`,
+    `<text x="${X.m1}" y="${BASE}" class="d">${m.slice(-1)}</text>`,
+    `<text x="${X.s10}" y="${BASE}" class="d">${s[0]}</text>`,
+    `<text x="${X.s1}" y="${BASE}" class="d">${s[1]}</text>`,
+  ].join('')
 }
 
-/** Where segment `i` sits on the dial, clockwise from the top. */
-function at(i: number, r = R): { x: number; y: number } {
-  const a = ((i + 0.5) / N) * 2 * Math.PI
-
-  return { x: CX + r * Math.sin(a), y: CY - r * Math.cos(a) }
-}
-
-function square(x: number, y: number, size: number, extra = ''): string {
-  return `<rect x="${(x - size / 2).toFixed(1)}" y="${(y - size / 2).toFixed(1)}" width="${size}" height="${size}"${extra}/>`
-}
-
-/** The ring of pixel segments that burns down as the block runs, with the time in the middle. */
+/** The ring that burns down as the block runs, with the time in the middle. */
 export function ringSvg(a: RingArgs): string {
   const length = Math.max(1, a.lengthMs)
-  const elapsedS = Math.min(length, Math.max(0, a.elapsedMs)) / 1000
-  const stepS = length / 1000 / N
-  const leftS = Math.max(0, length / 1000 - elapsedS)
-  const lit = a.phase === 'focus' ? EMBER : a.phase === 'break' ? MOSS : SECOND
-  const hot = a.phase === 'break' ? MOSS_LIGHT : LIGHT
-  const isMoving = a.isLive && leftS > 0
-  const isTicking = a.isLive && (a.isCountUp || leftS > 0)
-  // Flow keeps counting past the mark the ring fills to.
-  const seconds = a.isCountUp ? Math.max(0, a.elapsedMs) / 1000 : leftS
+  const f0 = Math.min(1, Math.max(0, a.elapsedMs / length))
+  const leftS = Math.max(0, length - a.elapsedMs) / 1000
+  const color = a.phase === 'break' ? MOSS : a.phase === 'focus' ? EMBER : a.phase === 'paused' ? ASH : KINDLING
+  // While you focus the arc carries the whole heat ramp, deep red low on the left to gold at the top right.
+  const stroke = a.phase === 'focus' ? 'url(#heat)' : color
+  const isMoving = a.isLive && f0 < 1
+  const seconds = a.isCountUp ? a.elapsedMs / 1000 : leftS
   const text = clockText(a.isCountUp ? Math.floor(seconds) : Math.ceil(seconds))
   const live = a.isLive ? liveDigits(seconds, a.isCountUp) : undefined
+  const css: string[] = []
 
-  // Every segment has an ash pixel underneath; a lit one sits on top while it
-  // has time left, and the one burning now glows. Each keeps its own clock
-  // in its animation delay, so the whole ring runs with no redraws.
-  const ash: string[] = []
-  const on: string[] = []
-  const glow: string[] = []
+  // Counting down, the lit arc is what's left and burns away from the top,
+  // clockwise. Flow has no end, so its arc grows toward the 25 minute mark.
+  let arc: string
 
-  for (let i = 0; i < N; i += 1) {
-    const { x, y } = at(i)
-    ash.push(square(x, y, 3))
-
-    if (a.phase === 'idle') {
-      continue
-    }
-
-    // Counting down, segment i burns out at the end of its slot; counting up, it lights at the start.
-    const startS = i * stepS
-    const endS = (i + 1) * stepS
-    const isLitNow = a.isCountUp ? elapsedS >= startS : elapsedS < endS
-
-    if (a.isCountUp) {
-      if (isLitNow) {
-        on.push(square(x, y, 7))
-      } else if (isMoving) {
-        on.push(square(x, y, 7, ` class="on" style="animation-delay:${(startS - elapsedS).toFixed(2)}s"`))
-      }
-    } else if (isLitNow) {
-      on.push(square(x, y, 7, isMoving ? ` class="off" style="animation-delay:${(endS - elapsedS).toFixed(2)}s"` : ''))
-    }
-
-    if (isMoving && elapsedS < endS) {
-      glow.push(square(x, y, 9, ` class="hot" style="animation-duration:${stepS.toFixed(2)}s;animation-delay:${(startS - elapsedS).toFixed(2)}s"`))
-    }
+  if (a.phase === 'idle') {
+    arc = `stroke-dasharray="${LEN.toFixed(1)}"`
+  } else if (a.isCountUp) {
+    arc = `stroke-dasharray="${(LEN * f0).toFixed(1)} ${LEN.toFixed(1)}" class="arc"`
+    css.push(`@keyframes arc { to { stroke-dasharray: ${LEN.toFixed(1)} ${LEN.toFixed(1)}; } }`)
+  } else {
+    arc = `stroke-dasharray="${LEN.toFixed(1)} ${LEN.toFixed(1)}" stroke-dashoffset="${(-LEN * f0).toFixed(1)}" class="arc"`
+    css.push(`@keyframes arc { to { stroke-dashoffset: ${(-LEN).toFixed(1)}; } }`)
   }
 
-  const css = [
-    live?.css ?? '',
-    '.off { animation: off 1ms linear forwards; } @keyframes off { to { opacity: 0; } }',
-    '.on { opacity: 0; animation: on 1ms linear forwards; } @keyframes on { to { opacity: 1; } }',
-    '.hot { opacity: 0; animation-name: hot; animation-timing-function: linear; } @keyframes hot { from, to { opacity: 1; } }',
-    '.blink { animation: blink 1s step-end infinite; } @keyframes blink { 50% { opacity: 0.3; } }',
-  ]
+  if (isMoving) {
+    css.push(`.arc { animation: arc ${leftS.toFixed(2)}s linear forwards; }`)
+    css.push(`@keyframes tip { to { transform: rotate(360deg); } } .tip { animation: tip ${leftS.toFixed(2)}s linear forwards; }`)
+  }
+
+  // The tip: a coal with a soft halo while you focus, a plain bead otherwise.
+  const isLit = a.phase === 'focus'
+  const tip =
+    a.phase === 'idle'
+      ? ''
+      : `<g class="tip" style="transform-origin: ${CX}px ${CY}px; transform: rotate(${(360 * f0).toFixed(2)}deg)">${
+          isLit ? `<circle cx="${CX}" cy="${CY - R}" r="19" fill="url(#halo)" class="halo"/>` : ''
+        }<circle cx="${CX}" cy="${CY - R}" r="${isLit ? 6 : 5}" fill="${isLit ? '#fff3d6' : a.phase === 'break' ? BONE : ASH}"/></g>`
+
+  if (isLit) {
+    css.push('.halo { animation: flicker 2.6s ease-in-out infinite; } @keyframes flicker { 0%, 100% { opacity: 0.6; } 50% { opacity: 1; } }')
+    css.push('.warm { animation: breathe 7s ease-in-out infinite; } @keyframes breathe { 0%, 100% { opacity: 0.55; } 50% { opacity: 1; } }')
+    css.push('@media (prefers-reduced-motion: reduce) { .halo, .warm { animation: none; } }')
+  }
 
   // A countdown that reaches zero rests on 00:00 instead of rolling round.
   if (live !== undefined && !a.isCountUp) {
@@ -222,34 +184,42 @@ export function ringSvg(a: RingArgs): string {
     live === undefined
       ? stillDigits(text)
       : `<g class="live">${live.svg}</g>${a.isCountUp ? '' : `<g class="rest">${stillDigits('00:00')}</g>`}`
-  const colon = `<g${isTicking ? ' class="blink"' : ''} opacity="0.7">${square(X.colon + 2.5, TOP + 12.5, P)}${square(X.colon + 2.5, TOP + 22.5, P)}</g>`
   const pips =
     a.rounds > 1 && a.rounds <= 8
       ? Array.from({ length: a.rounds }, (_, i) => {
-          const x = CX - ((a.rounds - 1) * 12) / 2 + i * 12
+          const x = CX - ((a.rounds - 1) * 13) / 2 + i * 13
           const isDone = i < a.round - 1
           const isNow = i === a.round - 1
 
-          return square(x, CY + 58, 6, ` fill="${isDone ? lit : 'none'}" stroke="${isNow ? lit : isDone ? 'none' : TRACK}"`)
+          return `<circle cx="${x}" cy="${CY + 66}" r="3" fill="${isDone ? color : 'none'}" stroke="${isDone || isNow ? color : KINDLING}" stroke-width="1.5"/>`
         }).join('')
       : ''
-  const isStill = a.phase === 'idle' || a.phase === 'paused'
 
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" width="${W * 2}" height="${H * 2}">
 <title>${esc(a.label)} ${text}</title>
-<defs><clipPath id="win"><rect x="0" y="${TOP}" width="${W}" height="${7 * P}"/></clipPath></defs>
+<defs>
+<radialGradient id="halo"><stop offset="0" stop-color="${GOLD}" stop-opacity="0.9"/><stop offset="0.35" stop-color="${EMBER}" stop-opacity="0.55"/><stop offset="1" stop-color="${EMBER}" stop-opacity="0"/></radialGradient>
+<radialGradient id="warm"><stop offset="0" stop-color="${EMBER}" stop-opacity="0.16"/><stop offset="1" stop-color="${EMBER}" stop-opacity="0"/></radialGradient>
+<linearGradient id="heat" gradientUnits="userSpaceOnUse" x1="${CX - R}" y1="${CY + R}" x2="${CX + R}" y2="${CY - R}"><stop offset="0" stop-color="${GARNET}"/><stop offset="0.55" stop-color="${EMBER}"/><stop offset="1" stop-color="${GOLD}"/></linearGradient>
+${EDGE}
+<clipPath id="win"><rect x="0" y="${BASE - 50}" width="${W}" height="${LINE}"/></clipPath>
+</defs>
 <style>
-${css.join('\n')}
-@media (prefers-reduced-motion: reduce) { .hot, .blink { animation: none; } }
+.d { font-family: ${FONT}; font-size: 50px; font-weight: 500; text-anchor: middle; fill: ${a.phase === 'idle' || a.phase === 'paused' ? ASH : BONE}; font-variant-numeric: tabular-nums; }
+.t { font-family: ${FONT}; text-anchor: middle; }
+${(live?.css ?? '') + '\n' + css.join('\n')}
 </style>
-${card(W, H)}
-<g fill="${TRACK}" shape-rendering="crispEdges">${ash.join('')}</g>
-<g fill="${lit}" shape-rendering="crispEdges">${on.join('')}</g>
-<g fill="${hot}" shape-rendering="crispEdges">${glow.join('')}</g>
-<text x="${CX}" y="${CY - 36}" text-anchor="middle" font-family="${MONO}" font-size="12" fill="${a.phase === 'idle' ? MUTED : lit}">${esc(a.label)}</text>
-<g fill="${isStill ? SECOND : TEXT}" shape-rendering="crispEdges"><g clip-path="url(#win)">${digits}</g>${colon}</g>
-${a.sub === '' ? '' : `<text x="${CX}" y="${CY + 40}" text-anchor="middle" font-family="${MONO}" font-size="11.5" fill="${MUTED}">${esc(cut(a.sub, 28))}</text>`}
-<g stroke-width="1.5">${pips}</g>
+${card(W, H, 26)}
+${isLit ? `<circle cx="${CX}" cy="${CY}" r="${R - 6}" fill="url(#warm)" class="warm"/>` : ''}
+${a.phase === 'idle' ? '' : `<circle cx="${CX}" cy="${CY}" r="${R}" fill="none" stroke="${KINDLING}" stroke-width="3" stroke-linecap="round" stroke-dasharray="0.1 ${(LEN / 60 - 0.1).toFixed(3)}"/>`}
+${a.phase === 'focus' || a.phase === 'break' ? `<circle cx="${CX}" cy="${CY}" r="${R}" fill="none" stroke="${color}" stroke-opacity="0.14" stroke-width="19" stroke-linecap="round" transform="rotate(-90 ${CX} ${CY})" ${arc}/>` : ''}
+<circle cx="${CX}" cy="${CY}" r="${R}" fill="none" stroke="${stroke}" stroke-width="${a.phase === 'idle' ? 2 : 7}" stroke-linecap="round" transform="rotate(-90 ${CX} ${CY})" ${arc}/>
+${a.phase === 'idle' ? `<circle cx="${CX}" cy="${CY - R}" r="5" fill="${CHAR}" stroke="${ASH}" stroke-width="1.5"/>` : ''}
+${tip}
+<text x="${CX}" y="${CY - 42}" class="t" font-size="13" font-weight="600" fill="${a.phase === 'idle' ? ASH : color}">${esc(a.label)}</text>
+<g clip-path="url(#win)">${digits}<text x="${CX}" y="${BASE - 4}" class="d" opacity="0.5">:</text></g>
+<text x="${CX}" y="${CY + 44}" class="t" font-size="12.5" fill="${ASH}">${esc(cut(a.sub, 26))}</text>
+${pips}
 </svg>`
 }
 
@@ -260,68 +230,74 @@ export type DayArgs = {
   streak: number
   /** Share of today's check-ins that stayed on task, 0 to 1, or undefined before any. */
   onTask: number | undefined
-  /** A block has just finished and waits for its check-in: its tile blinks. */
+  /** Whether a focus block is running now: the next coal shows as catching. */
+  isFocusing: boolean
+  /** A block has just finished: its coal flares once as the card is drawn. */
   isFresh: boolean
   week: readonly { label: string; count: number; isToday: boolean }[]
 }
 
-/** Today as a row of pixel tiles toward the goal, over the week as stacked pixel bars. */
+/** Today as a row of coals, one per block of the goal, over the week's bars. */
 export function daySvg(a: DayArgs): string {
   const width = W
-  const height = 220
-  const top = 92
-  const base = 156
-  const slot = (width - 32) / Math.max(1, a.week.length)
+  const height = 200
+  const top = 84
+  const base = 148
+  const slot = (width - 16) / Math.max(1, a.week.length)
   const most = Math.max(a.goal, 1, ...a.week.map(d => d.count))
-  // One cell per block, as tall as the room allows.
-  const cell = Math.max(2, Math.min(7, Math.floor((base - top) / most) - 2))
   const isEmpty = a.week.every(d => d.count === 0)
-  const tiles = Math.min(12, Math.max(a.goal, a.today))
-  const tileRow =
-    tiles === 0
-      ? ''
-      : Array.from({ length: tiles }, (_, i) => {
-          const x = 16 + i * 16
-          const isLit = i < a.today
-          const isNew = a.isFresh && i === a.today - 1
+  const hasCoals = a.goal > 0 && a.goal <= 12
+  const coals = hasCoals
+    ? Array.from({ length: Math.max(a.goal, a.today) > 12 ? 12 : a.goal }, (_, i) => {
+        const x = 23 + i * 19
+        const isLit = i < a.today
+        const isNext = i === a.today && a.isFocusing
 
-          return isLit
-            ? `<rect x="${x}" y="52" width="12" height="12" fill="${EMBER}"${isNew ? ' class="new"' : ''}/>`
-            : `<rect x="${x + 0.75}" y="52.75" width="10.5" height="10.5" fill="none" stroke="${TRACK}" stroke-width="1.5"/>`
-        }).join('')
+        const flare =
+          isLit && a.isFresh && i === a.today - 1
+            ? `<circle cx="${x}" cy="52" r="7" fill="none" stroke="${GOLD}" stroke-width="2" opacity="0"><animate attributeName="r" values="7;20" dur="1.4s" begin="0.2s" fill="freeze"/><animate attributeName="opacity" values="0.9;0" dur="1.4s" begin="0.2s" fill="freeze"/></circle>`
+            : ''
+
+        return isLit
+          ? `<circle cx="${x}" cy="52" r="6.5" fill="url(#coal)"/>${flare}`
+          : `<circle cx="${x}" cy="52" r="5.75" fill="none" stroke="${isNext ? EMBER : KINDLING}" stroke-width="1.5" ${isNext ? '' : 'stroke-dasharray="1.6 2.4" stroke-linecap="round"'}/>`
+      }).join('')
+    : ''
+  const count = a.goal > 0 ? `${a.today} of ${a.goal}` : `${a.today} ${a.today === 1 ? 'block' : 'blocks'}`
   const bars = a.week
     .map((day, i) => {
-      const x = 16 + i * slot + slot / 2
-      const fill = day.isToday ? EMBER : PAST
-      const cells =
-        day.count === 0
-          ? `<rect x="${x - 7}" y="${base - 2}" width="14" height="2" fill="${TRACK}"/>`
-          : Array.from({ length: day.count }, (_, k) => `<rect x="${x - 7}" y="${base - (k + 1) * (cell + 2) + 2}" width="14" height="${cell}" fill="${fill}"/>`).join('')
+      const x = 8 + i * slot + slot / 2
+      const h = day.count === 0 ? 3 : Math.max(6, ((base - top) * day.count) / most)
+      const fill = day.count === 0 ? KINDLING : day.isToday ? 'url(#bar)' : CINDER
+      const n = day.count > 0 ? `<text x="${x}" y="${base - h - 6}" text-anchor="middle" font-size="11" fill="${day.isToday ? BONE : ASH}">${day.count}</text>` : ''
 
-      return `${cells}<text x="${x}" y="${base + 18}" text-anchor="middle" font-size="11" fill="${day.isToday ? TEXT : MUTED}">${esc(day.label.slice(0, 2))}</text>`
+      return `<rect x="${(x - 10).toFixed(1)}" y="${(base - h).toFixed(1)}" width="20" height="${h.toFixed(1)}" rx="5" fill="${fill}"/>${n}<text x="${x}" y="${base + 17}" text-anchor="middle" font-size="11" font-weight="${day.isToday ? 700 : 400}" fill="${day.isToday ? BONE : ASH}">${esc(day.label.slice(0, 1))}</text>`
     })
     .join('')
-  const goalY = base - a.goal * (cell + 2) + 1
+  const goalY = base - ((base - top) * a.goal) / most
   const goalLine =
-    a.goal > 0 && !isEmpty && a.goal * (cell + 2) <= base - top + 2
-      ? `<line x1="16" x2="${width - 16}" y1="${goalY}" y2="${goalY}" stroke="${TRACK}" stroke-dasharray="2 4"/>`
+    a.goal > 0 && !isEmpty
+      ? `<line x1="16" x2="${width - 16}" y1="${goalY.toFixed(1)}" y2="${goalY.toFixed(1)}" stroke="${ASH}" stroke-opacity="0.35" stroke-dasharray="3 4"/>`
       : ''
-  const hint = isEmpty ? `<text x="${width / 2}" y="${(top + base) / 2 + 4}" text-anchor="middle" font-size="11.5" fill="${MUTED}">your week fills in as you finish blocks</text>` : ''
-  const of = a.goal > 0 ? `/${a.goal}` : ''
-  const streak = a.streak > 1 ? `${a.streak} day streak` : a.streak === 1 ? 'first day of a streak' : 'no streak yet'
-  const onTask = a.onTask === undefined ? '' : `${Math.round(a.onTask * 100)}% on task`
-  const meta = [`${a.minutes} min`, streak, onTask].filter(Boolean).join(', ')
+  const hint = isEmpty
+    ? `<text x="${width / 2}" y="${(top + base) / 2 + 4}" text-anchor="middle" font-size="12" fill="${ASH}">Your week fills in as you finish blocks</text>`
+    : ''
+  const streak = a.streak > 0 ? `${a.streak} day streak` : 'No streak yet'
+  const onTask = a.onTask === undefined ? '' : `<text x="${width - 16}" y="${height - 14}" text-anchor="end" font-size="11.5" fill="${ASH}">${Math.round(a.onTask * 100)}% on task</text>`
 
-  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${height}" width="${width * 2}" height="${height * 2}" font-family="${MONO}" shape-rendering="crispEdges">
-<title>Today ${a.today}${of} blocks, ${meta}</title>
-<style>.new { animation: new 1s step-end infinite; } @keyframes new { 50% { fill: ${LIGHT}; } } @media (prefers-reduced-motion: reduce) { .new { animation: none; } }</style>
-${card(width, height)}
-<text x="16" y="30" font-size="12" fill="${SECOND}">today <tspan fill="${TEXT}">${a.today}${of}</tspan></text>
-<text x="${width - 16}" y="30" text-anchor="end" font-size="11.5" fill="${MUTED}">${a.minutes} min</text>
-${tileRow}
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${height}" width="${width * 2}" height="${height * 2}" font-family="${FONT}">
+<title>Today ${count}, ${a.minutes} min, ${streak}</title>
+<defs>
+<radialGradient id="coal" cx="0.38" cy="0.34" r="0.75"><stop offset="0" stop-color="${GOLD}"/><stop offset="0.5" stop-color="${EMBER}"/><stop offset="1" stop-color="${GARNET}"/></radialGradient>
+<linearGradient id="bar" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${GOLD}"/><stop offset="0.45" stop-color="${EMBER}"/><stop offset="1" stop-color="${GARNET}"/></linearGradient>
+${EDGE}
+</defs>
+${card(width, height, 22)}
+<text x="16" y="28" font-size="13" font-weight="600" fill="${BONE}">Today</text>
+<text x="${width - 16}" y="28" text-anchor="end" font-size="12" fill="${ASH}">${a.minutes} min of focus</text>
+${coals}
+<text x="${width - 16}" y="${hasCoals ? 56 : 52}" text-anchor="end" font-size="12" fill="${ASH}" style="font-variant-numeric: tabular-nums">${count}</text>
 ${goalLine}${bars}${hint}
-<line x1="16" x2="${width - 16}" y1="${height - 34}" y2="${height - 34}" stroke="${HAIR}"/>
-<text x="16" y="${height - 14}" font-size="11.5" fill="${MUTED}">${esc(streak)}</text>
-${onTask === '' ? '' : `<text x="${width - 16}" y="${height - 14}" text-anchor="end" font-size="11.5" fill="${MUTED}">${onTask}</text>`}
+<text x="16" y="${height - 14}" font-size="11.5" fill="${ASH}">${streak}</text>${onTask}
 </svg>`
 }

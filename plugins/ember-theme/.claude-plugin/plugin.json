@@ -1,6 +1,6 @@
 {
   "name": "ember-theme",
-  "description": "A warm, dark-only theme for long sessions: quiet warm-neutral surfaces, one ember-orange accent, and a faint ASCII field at the window's edges that glows while you focus with pomo. No blue anywhere.",
+  "description": "A warm, dark-only theme for long sessions: mahogany surfaces, bone text and the colours of a fire, over a hearth that glows at the foot of the window. No blue anywhere.",
   "author": {
     "name": "Dillon Rosenkranz"
   },
@@ -13,10 +13,16 @@
     "low-blue-light"
   ],
   "userConfig": {
-    "backdrop": {
+    "glow": {
       "type": "boolean",
-      "title": "Ash field",
-      "description": "A faint scatter of ASCII glyphs along the edges of the window, which follows the pomo timer. Off gives a plain background.",
+      "title": "Hearth",
+      "description": "A bed of coals glowing at the foot of the window, behind frosted panels. Off gives a flat background.",
+      "default": true
+    },
+    "sparks": {
+      "type": "boolean",
+      "title": "Sparks",
+      "description": "A few sparks drifting slowly up from the hearth. Off keeps the glow still. Your system's reduce-motion setting turns them off too.",
       "default": true
     }
   }

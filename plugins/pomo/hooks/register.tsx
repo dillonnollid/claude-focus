@@ -3,8 +3,6 @@ import type { Register, RenderElement } from 'claude-code'
 
 import type { View } from '../types'
 import { daySvg, ringSvg } from './art'
-import { mascotSvg } from './mascot'
-import type { MascotState } from './mascot'
 import { NOISES, createFocus, settingsFrom } from './focus'
 import type { Focus, Io, RunResult } from './focus'
 import { dots, elapsed, formatLeft, remaining } from './timer'
@@ -12,9 +10,9 @@ import { dots, elapsed, formatLeft, remaining } from './timer'
 const view = atom({ plugin: 'pomo', key: 'view' } as const, null, { shape: 'view-5' })
 
 const PANE = 'focus'
-// The cards' ground and edge, the same as the drawings' (art.ts).
-const CARD = '#211814'
-const EDGE = '#3a2c24'
+// The cards' ground and edge: Hearth's char, as in art.ts, with a warm hairline.
+const CARD = '#22140f'
+const EDGE = '#3a241a'
 const TITLE = 'Focus'
 // The ring keeps its own time, so it is only drawn again when the timer
 // changes; this is the longest one drawing is trusted before a fresh one.
@@ -67,7 +65,6 @@ export const register: Register = (on, options) => {
   // Each parked thought gets a new field, which is what empties the box.
   let parkSeq = 0
   let ring: { key: string; at: number; source: string } | undefined
-  let mascot: { key: string; source: string } | undefined
   // Bumped when the app connects, so a fresh window gets a fresh ring.
   let mounts = 0
 
@@ -258,34 +255,19 @@ export const register: Register = (on, options) => {
     const round = Math.min((v.cycleDone % s.longEvery) + (d.isFocus ? 1 : 0), s.longEvery)
     const goal = s.goal > 0 ? `${v.today} of ${s.goal} today` : `${v.today} today`
     const label = d.isPaused ? `${d.name}, paused` : d.name
-    // The header says what is happening and what for; the ring keeps to the time.
-    const headline = d.isIdle ? 'Ready when you are' : d.isPaused ? 'Paused' : d.isFocus ? (d.isFlow ? 'In flow' : 'Focusing') : d.name === 'Long break' ? 'Long break' : 'On a break'
-    const detail = d.isIdle
+    const sub = d.isIdle
       ? goal
       : d.isFocus
         ? d.intention !== ''
           ? d.intention
           : d.isFlow
-            ? 'no clock to beat, stop when you are done'
+            ? 'end it when you are done'
             : `block ${round} of ${s.longEvery}`
         : 'stand up, look far away'
-    const sub = d.isFlow && d.isFocus ? 'end it when you are done' : ''
-    const pose: MascotState = d.isIdle ? 'idle' : d.isPaused ? 'paused' : d.isFocus ? (d.isFlow ? 'flow' : 'focus') : 'break'
-    // A break that has only just begun gets a little celebration first.
-    const isFresh = pose === 'break' && d.done < 10_000
-
-    // One drawing per pose, kept between redraws so the animation never restarts.
-    const mascotKey = JSON.stringify([mounts, pose, isFresh])
-
-    if (mascot === undefined || mascot.key !== mascotKey) {
-      mascot = { key: mascotKey, source: mascotSvg(pose, isFresh) }
-    }
-
-    const cinder = mascot.source
 
     // The small form of a minimized pane on the desktop: a glance, no form.
     if (e.props.placement === 'widget') {
-      const glance = (
+      return (
         <Box flexDirection="column">
           <Text color={d.color} weight="semibold" size="caption">
             {label}
@@ -298,35 +280,11 @@ export const register: Register = (on, options) => {
           </Text>
         </Box>
       )
-
-      return Svg === undefined ? (
-        glance
-      ) : (
-        <Box flexDirection="row" alignItems="center" columnGap={1}>
-          <Svg source={cinder} alt={`Cinder the ember, ${headline.toLowerCase()}`} width={60} height={49} isInteractive />
-          {glance}
-        </Box>
-      )
     }
 
     let hero
-    let header
 
     if (Svg !== undefined) {
-      header = (
-        <Box flexDirection="row" alignItems="center" columnGap={1}>
-          <Svg source={cinder} alt={`Cinder the ember, ${headline.toLowerCase()}`} width={102} height={84} isInteractive />
-          <Box flexDirection="column" flexShrink={1}>
-            <Text color={d.color} weight="semibold">
-              {headline}
-            </Text>
-            <Text dimColor wrap="truncate-end">
-              {detail}
-            </Text>
-          </Box>
-        </Box>
-      )
-
       // One drawing per state of the timer. It animates itself from there, so
       // redrawing the dashboard around it never restarts or blinks the clock.
       const key = JSON.stringify([mounts, v.epoch, e.props.placement, d.t, label, sub, round, s.longEvery, d.isIdle ? s.focusMs : 0])
@@ -351,12 +309,11 @@ export const register: Register = (on, options) => {
 
       hero = <Svg source={ring.source} alt={`${label}, ${formatLeft(d.isIdle ? s.focusMs : d.left, false)}${d.isIdle ? '' : ' left'}`} isInteractive />
     } else {
-      header = null
       hero = (
         <Box flexDirection="column">
           <Text color={d.color} weight="semibold">
             {label}
-            <Text dimColor> {detail}</Text>
+            <Text dimColor> {sub}</Text>
           </Text>
           <Text weight="bold" tabular>
             {d.isFlow && d.isFocus ? `${Math.floor(d.done / 60_000)} min in` : `${formatLeft(d.isIdle ? s.focusMs : d.left, false)}${d.isIdle ? '' : ' left'}`}
@@ -372,7 +329,7 @@ export const register: Register = (on, options) => {
     }
 
     // Every group of controls sits on a card the colour of the drawings, so the
-    // pane reads as one stack of cards. A caption names each card.
+    // pane reads as one stack of cards, each named by a caption.
     // A plain function, not a component: the engine's JSX takes only its own elements.
     const card = (title: string, hint: string | undefined, ...body: (RenderElement | null)[]) => (
       <Box flexDirection="column" gap={1} backgroundColor={CARD} borderStyle="round" borderColor={EDGE} paddingX={1} paddingY={1}>
@@ -383,16 +340,15 @@ export const register: Register = (on, options) => {
         {body.filter((child): child is RenderElement => child !== null)}
       </Box>
     )
-    const minutes = Math.round(s.focusMs / 60_000)
 
     const controls = d.isIdle
       ? card(
           'Start a block',
-          'name it, then pick a length',
+          undefined,
           <Input
             key="intention"
-            placeholder="What is this block for?"
-            submitLabel={`start ${minutes} min`}
+            placeholder="The one thing this block is for"
+            submitLabel="start"
             onInput={value => {
               draft = value
             }}
@@ -402,18 +358,18 @@ export const register: Register = (on, options) => {
             }}
           />,
           <Box flexDirection="row" flexWrap="wrap" columnGap={1} rowGap={1}>
-            <Button key="start" label={`▶ ${minutes} min`} hotkey="1" variant="primary" onPress={startWith('pomodoro')} />
-            <Button key="start-50" label="▶▶ 50 min" hotkey="2" onPress={startWith('long')} />
-            <Button key="start-flow" label="∞ Flow" hotkey="3" onPress={startWith('flow')} />
+            <Button key="start" label={`${Math.round(s.focusMs / 60_000)} min`} variant="primary" onPress={startWith('pomodoro')} />
+            <Button key="start-50" label="50 min" onPress={startWith('long')} />
+            <Button key="start-flow" label="Flow" onPress={startWith('flow')} />
           </Box>,
         )
       : d.isFocus
         ? card(
-            d.isPaused ? 'Paused' : 'Stay on it',
-            d.isPaused ? 'pick up where you left off' : 'park anything else for the break',
+            d.isPaused ? 'Paused' : 'In the block',
+            undefined,
             <Input
               key={`park-${parkSeq}`}
-              placeholder="A stray thought? Park it here"
+              placeholder="Stray thought? Park it for the break"
               submitLabel="park"
               autoFocus
               onSubmit={value => {
@@ -423,26 +379,26 @@ export const register: Register = (on, options) => {
               }}
             />,
             <Box flexDirection="row" flexWrap="wrap" columnGap={1} rowGap={1}>
-              {d.isPaused && <Button key="resume" label="▶ Resume" variant="primary" onPress={() => void f.resume()} />}
-              {!d.isPaused && d.isFlow && <Button key="done" label="✓ Done, take a break" variant="primary" onPress={() => void f.finish()} />}
-              {!d.isPaused && <Button key="pause" label="❚❚ Pause" onPress={() => void f.pause()} />}
+              {d.isPaused && <Button key="resume" label="Resume" variant="primary" onPress={() => void f.resume()} />}
+              {!d.isPaused && d.isFlow && <Button key="done" label="Done, take a break" variant="primary" onPress={() => void f.finish()} />}
+              {!d.isPaused && <Button key="pause" label="Pause" onPress={() => void f.pause()} />}
               {!d.isPaused && !d.isFlow && <Button key="more" label="+5 min" onPress={() => void f.addFive()} />}
-              <Button key="stop" label="✕ Give up" dimColor onPress={() => void f.stop()} />
+              <Button key="stop" label="Give up" dimColor onPress={() => void f.stop()} />
             </Box>,
           )
         : card(
-            v.checkIn !== null ? 'How did that block go?' : d.isPaused ? 'Break paused' : 'Take a breather',
-            v.checkIn !== null ? undefined : 'the next block waits for you',
+            v.checkIn !== null ? 'How did that block go?' : 'Break',
+            undefined,
             v.checkIn === null ? null : (
               <Box flexDirection="row" flexWrap="wrap" columnGap={1} rowGap={1}>
-                <Button key="check-did" label="✓ Did it" variant="primary" onPress={() => void f.answerCheckIn('did')} />
-                <Button key="check-partly" label="~ Partly" onPress={() => void f.answerCheckIn('partly')} />
-                <Button key="check-distracted" label="✕ Got distracted" onPress={() => void f.answerCheckIn('distracted')} />
+                <Button key="check-did" label="Did it" onPress={() => void f.answerCheckIn('did')} />
+                <Button key="check-partly" label="Partly" onPress={() => void f.answerCheckIn('partly')} />
+                <Button key="check-distracted" label="Got distracted" onPress={() => void f.answerCheckIn('distracted')} />
               </Box>
             ),
             <Box flexDirection="row" flexWrap="wrap" columnGap={1} rowGap={1}>
-              {d.isPaused && <Button key="resume" label="▶ Resume" variant="primary" onPress={() => void f.resume()} />}
-              <Button key="skip" label="⏭ Skip break" dimColor onPress={() => void f.skip()} />
+              {d.isPaused && <Button key="resume" label="Resume" variant="primary" onPress={() => void f.resume()} />}
+              <Button key="skip" label="Skip break" dimColor onPress={() => void f.skip()} />
             </Box>,
           )
 
@@ -457,7 +413,7 @@ export const register: Register = (on, options) => {
             ...v.parked.map(p =>
               isHeadsDown ? (
                 <Text key={`parked-${p.id}`} dimColor wrap="truncate-end">
-                  {`· ${p.text}`}
+                  {p.text}
                 </Text>
               ) : (
                 <Box key={`parked-${p.id}`} flexDirection="row" columnGap={1} alignItems="center">
@@ -480,6 +436,7 @@ export const register: Register = (on, options) => {
             minutes: v.todayMinutes,
             streak: v.streak,
             onTask: answered === 0 ? undefined : (did + partly / 2) / answered,
+            isFocusing: d.isFocus,
             isFresh: v.checkIn !== null,
             week: v.week,
           })}
@@ -497,14 +454,12 @@ export const register: Register = (on, options) => {
         </Box>
       )
 
-    // Brown is the deepest bed and white the brightest; the bars say so.
-    const noiseLabel = { off: '◌ Off', brown: '▁ Brown', pink: '▃ Pink', white: '▅ White' } as const
     const noise = (
       <Box flexDirection="row" flexWrap="wrap" columnGap={1} rowGap={1}>
         {NOISES.map(kind => (
           <Button
             key={`noise-${kind}`}
-            label={noiseLabel[kind]}
+            label={kind === 'off' ? 'Off' : `${kind[0]?.toUpperCase()}${kind.slice(1)}`}
             variant={v.noise === kind ? 'primary' : 'secondary'}
             dimColor={v.noise !== kind}
             onPress={() => void f.setNoise(kind)}
@@ -516,21 +471,20 @@ export const register: Register = (on, options) => {
     // Where blocks go: connected, or a field to connect it, instead of pointing at a settings screen.
     const vault = v.needsVault ? (
       <Box flexDirection="column" gap={1}>
-        <Text dimColor>Paste your Obsidian vault's folder to save each block and parked thought to your daily note.</Text>
+        <Text dimColor>Blocks and parked thoughts can go in your Obsidian daily note. Paste your vault's folder to turn that on.</Text>
         <Input key="vault" placeholder="~/Documents/My Vault" submitLabel="connect" onSubmit={value => void f.setVaultPath(value)} />
       </Box>
     ) : (
-      <Text dimColor>{v.vaultName === '' ? v.logLine : `✓ Connected to your ${v.vaultName} vault`}</Text>
+      <Text dimColor>{v.vaultName === '' ? v.logLine : `Connected to your ${v.vaultName} vault`}</Text>
     )
 
     return (
       <Box flexDirection="column" gap={1} paddingX={1} paddingY={1}>
-        {header}
         {hero}
         {controls}
         {parked}
         {stats}
-        {card('Sound and notes', v.switchLine === '' ? undefined : v.switchLine.toLowerCase(), noise, vault)}
+        {card('Noise', v.switchLine === '' ? undefined : v.switchLine, noise, vault)}
       </Box>
     )
   })
