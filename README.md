@@ -23,7 +23,7 @@ No terminal? In the desktop app, click **+** next to the prompt box, then **Plug
 
 ### Turn on updates, once
 
-Claude Code only updates plugins by itself for Anthropic's own marketplace. For this one, switch it on once: start `claude` in a terminal, run `/plugin`, open the **Marketplaces** tab, pick **claude-focus** and choose **Enable auto-update**. New versions then arrive on their own and load the next time Claude starts.
+Claude Code only updates plugins by itself for Anthropic's own marketplace. For this one, switch it on once. The switch isn't in the desktop app's plugin settings, only in the terminal: run `claude`, type `/plugin`, open the **Marketplaces** tab, pick **claude-focus** and choose **Enable auto-update**, then `/exit`. New versions then arrive on their own and load the next time Claude starts, in the terminal and the desktop app alike.
 
 If you'd rather update by hand:
 
