@@ -9,21 +9,29 @@ Install either one on its own, or both.
 
 ## Install
 
-At the prompt of a Claude Code terminal session:
-
-```
-/plugin install pomo --marketplace dillonnollid/claude-focus
-/plugin install ember-theme --marketplace dillonnollid/claude-focus
-```
-
-Or from a shell:
+In a terminal, paste this whole block:
 
 ```bash
-claude plugin install pomo --marketplace dillonnollid/claude-focus
-claude plugin install ember-theme --marketplace dillonnollid/claude-focus
+claude plugin marketplace add dillonnollid/claude-focus
+claude plugin install pomo@claude-focus
+claude plugin install ember-theme@claude-focus
 ```
 
-Answer `y` to add the marketplace, then pick the user scope so it loads in every session. In the desktop app, where `/plugin` doesn't run, click **+** next to the prompt box, then **Plugins**, **Add marketplace** with `dillonnollid/claude-focus`, then **Add plugin**.
+Then quit and reopen Claude, or run `/reload-plugins` in a session that's already open. Leave out the last line if you only want the timer.
+
+No terminal? In the desktop app, click **+** next to the prompt box, then **Plugins**, **Add marketplace** with `dillonnollid/claude-focus`, then add each plugin.
+
+### Turn on updates, once
+
+Claude Code only updates plugins by itself for Anthropic's own marketplace. For this one, switch it on once: start `claude` in a terminal, run `/plugin`, open the **Marketplaces** tab, pick **claude-focus** and choose **Enable auto-update**. New versions then arrive on their own and load the next time Claude starts.
+
+If you'd rather update by hand:
+
+```bash
+claude plugin marketplace update claude-focus
+claude plugin update pomo@claude-focus
+claude plugin update ember-theme@claude-focus
+```
 
 ## Where it shows
 

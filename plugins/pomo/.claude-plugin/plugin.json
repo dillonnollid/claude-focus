@@ -1,6 +1,5 @@
 {
   "name": "pomo",
-  "version": "0.2.0",
   "description": "A focus dashboard beside the chat: a pomodoro ring that counts down live, buttons, today's progress, the week as a chart, brown, pink or white noise, soft chimes, and optional logging to your Obsidian daily note.",
   "author": {
     "name": "Dillon Rosenkranz"

@@ -1,10 +1,17 @@
 {
   "name": "ember-theme",
-  "version": "0.2.0",
   "description": "A warm, dark-only theme for long sessions: charcoal, ember orange and cream text, with no blue anywhere.",
-  "author": { "name": "Dillon Rosenkranz" },
+  "author": {
+    "name": "Dillon Rosenkranz"
+  },
   "license": "MIT",
-  "keywords": ["theme", "dark", "warm", "focus", "low-blue-light"],
+  "keywords": [
+    "theme",
+    "dark",
+    "warm",
+    "focus",
+    "low-blue-light"
+  ],
   "userConfig": {
     "glow": {
       "type": "boolean",
