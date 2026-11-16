@@ -23,6 +23,8 @@ export type Io = {
   toast: (text: string, timeoutMs: number) => void
   notify: (text: string) => void
   play: (asset: string, gain: number) => void
+  /** Starts a clip on a loop; the function it answers stops it. */
+  loop: (asset: string, gain: number) => () => void
   after: (ms: number, fn: () => void) => Cancel
   every: (ms: number, fn: () => void) => Cancel
   publish: (view: View) => Promise<void>
@@ -38,7 +40,13 @@ export type Settings = Config & {
   property: string
   unit: 'minutes' | 'sessions'
   timeZone: string
+  noiseGain: number
+  noiseQuietInBreaks: boolean
 }
+
+export type Noise = 'off' | 'brown' | 'pink' | 'white'
+
+export const NOISES: readonly Noise[] = ['off', 'brown', 'pink', 'white']
 
 type Options = Readonly<Record<string, string | number | boolean | readonly string[]>>
 
@@ -83,6 +91,8 @@ export function settingsFrom(o: Options): Settings {
     property: str(o, 'vaultProperty', 'deep_work_mins') || 'deep_work_mins',
     unit: str(o, 'vaultUnit', 'minutes') === 'sessions' ? 'sessions' : 'minutes',
     timeZone: str(o, 'timeZone', ''),
+    noiseGain: num(o, 'noiseVolume', 0.5, 0, 1),
+    noiseQuietInBreaks: bool(o, 'noiseQuietInBreaks', true),
   }
 }
 
@@ -144,6 +154,22 @@ export function createFocus(io: Io, s: Settings, cwd: string) {
   // The last snapshot drawn, so the per-second tick only moves the clock.
   let shown: View | undefined
   let ticks = 0
+  // Noise belongs to this session alone, so two open sessions never play
+  // two beds over each other.
+  let noise: Noise = 'off'
+  let playing: { kind: Noise; stop: () => void } | undefined
+
+  const applyNoise = (t: Timer) => {
+    const isResting = t.phase === 'break' || t.phase === 'paused'
+    const want = noise !== 'off' && s.noiseGain > 0 && !(s.noiseQuietInBreaks && isResting) ? noise : 'off'
+
+    if (playing?.kind === want) {
+      return
+    }
+
+    playing?.stop()
+    playing = want === 'off' ? undefined : { kind: want, stop: io.loop(`sounds/noise-${want}.wav`, s.noiseGain) }
+  }
 
   // One change to the timer at a time, so a tick and a button press can't
   // both count the same block.
@@ -220,7 +246,7 @@ export function createFocus(io: Io, s: Settings, cwd: string) {
       }
 
       if (root === undefined) {
-        return { root: null, why: 'this session is not inside a vault (set "Obsidian vault" in /config to log from anywhere)' }
+        return { root: null, why: `no vault found from ${cwd}. Set "Obsidian vault" in the plugin's settings` }
       }
     }
 
@@ -330,8 +356,8 @@ export function createFocus(io: Io, s: Settings, cwd: string) {
     const per = s.unit === 'sessions' ? '1' : String(Math.round(s.focusMs / MIN))
 
     return v.root === null
-      ? `Not logging to a vault, because ${v.why}.`
-      : `Each block adds ${per} to ${s.property} in today's note in ${joinPath(v.root, v.notes.folder || '.')}.`
+      ? `Not logging to Obsidian: ${v.why}.`
+      : `Each block adds ${per} to ${s.property} in ${joinPath(v.root, v.notes.folder || '.')}.`
   }
 
   const publish = async (saved: Saved, now: number) => {
@@ -345,7 +371,9 @@ export function createFocus(io: Io, s: Settings, cwd: string) {
       now,
       week: weekOf(days, now),
       logLine: await logLine(),
+      noise,
     }
+    applyNoise(saved.timer)
     await io.publish(shown)
   }
 
@@ -550,6 +578,13 @@ export function createFocus(io: Io, s: Settings, cwd: string) {
         return stats()
       case 'start':
         return start('')
+      case 'noise':
+        return setNoise(noise === 'off' ? 'brown' : 'off')
+      case 'noise off':
+      case 'noise brown':
+      case 'noise pink':
+      case 'noise white':
+        return setNoise(word.slice(6) as Noise)
       case 'help':
         return [
           '/pomo                             open the focus dashboard',
@@ -557,6 +592,7 @@ export function createFocus(io: Io, s: Settings, cwd: string) {
           '/pomo pause | resume | stop       stop abandons the block, and it is not counted',
           '/pomo skip                        end a break early',
           '/pomo stats                       the last 7 days, and where blocks are logged',
+          '/pomo noise [brown|pink|white|off] a quiet noise bed, in this session only',
         ].join('\n')
       default:
         return start(args.trim().replace(/^start\s+/i, ''))
@@ -568,14 +604,29 @@ export function createFocus(io: Io, s: Settings, cwd: string) {
     await flushVault().catch(() => undefined)
   }
 
+  const setNoise = (kind: Noise) =>
+    locked(async () => {
+      noise = kind
+
+      if (shown !== undefined) {
+        shown = { ...shown, noise }
+        applyNoise(shown.timer)
+        await io.publish(shown)
+      }
+
+      return kind === 'off' ? 'Noise off.' : `${kind[0]?.toUpperCase()}${kind.slice(1)} noise on.`
+    })
+
   const end = () => {
+    playing?.stop()
+    playing = undefined
     endTimer?.cancel()
     tick?.cancel()
     endTimer = undefined
     tick = undefined
   }
 
-  return { begin, end, sync, command, start, pause: pauseIt, resume: resumeIt, stop, skip, stats }
+  return { begin, end, sync, command, start, pause: pauseIt, resume: resumeIt, stop, skip, stats, setNoise }
 }
 
 export type Focus = ReturnType<typeof createFocus>

@@ -68,15 +68,22 @@ export const register: Register = (on, options) => {
     const set = await $.theme.set(look)
     lastResult = set.isDrawn ? 'drawn' : `not drawn (${set.reason})`
 
-    if (!set.isDrawn) {
-      $.ui.status(`Ember theme not drawn: ${set.reason}`)
-    }
-
     await $.command.register({
       name: 'ember',
       description: 'Ember theme: apply it again and say whether this app draws it, or "off" to clear it',
       argumentHint: '[off]',
     })
+
+    return next(e)
+  })
+
+  // The desktop app connects after the session starts: set the look again
+  // then, so it paints the moment there is something to paint.
+  on('session.attach', async ($, e, next) => {
+    if (e.surface === 'desktop' || e.surface === 'mobile') {
+      const set = await $.theme.set(look)
+      lastResult = set.isDrawn ? 'drawn' : `not drawn (${set.reason})`
+    }
 
     return next(e)
   })

@@ -36,6 +36,8 @@ export type View = {
   week: { label: string; count: number; isToday: boolean }[]
   /** One line on where finished blocks are logged. */
   logLine: string
+  /** The noise bed chosen in this session. */
+  noise: 'off' | 'brown' | 'pink' | 'white'
 }
 
 declare module 'claude-code' {
