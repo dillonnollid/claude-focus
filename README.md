@@ -2,7 +2,7 @@
 
 Two small mods for Claude Code, made for long sessions where you want to stay on one thing.
 
-- **ember-focus** puts a focus dashboard beside the chat. It runs a pomodoro timer with a live countdown and buttons, shows today's progress and the last seven days, plays a soft chime when a block or break ends, and can log each finished block to your Obsidian daily note.
+- **pomo** puts a focus dashboard beside the chat. It runs a pomodoro timer with a live countdown and buttons, shows today's progress and the last seven days, plays a soft chime when a block or break ends, and can log each finished block to your Obsidian daily note.
 - **ember-theme** is a dark-only theme in warm charcoal, ember orange and cream text. Nothing on screen is blue, which is easier on the eyes late at night.
 
 Install either one on its own, or both.
@@ -12,14 +12,14 @@ Install either one on its own, or both.
 At the prompt of a Claude Code terminal session:
 
 ```
-/plugin install ember-focus --marketplace dillonnollid/claude-focus
+/plugin install pomo --marketplace dillonnollid/claude-focus
 /plugin install ember-theme --marketplace dillonnollid/claude-focus
 ```
 
 Or from a shell:
 
 ```bash
-claude plugin install ember-focus --marketplace dillonnollid/claude-focus
+claude plugin install pomo --marketplace dillonnollid/claude-focus
 claude plugin install ember-theme --marketplace dillonnollid/claude-focus
 ```
 
@@ -56,7 +56,7 @@ The timer keeps the time each block ends rather than counting down in memory. Cl
 
 ## Logging to Obsidian
 
-When a block finishes, ember-focus adds 25 to a number in that day's daily note, `deep_work_mins` by default. It reads your Daily Notes settings (`.obsidian/daily-notes.json`) to find the note, so a custom folder or date format like `YYYY-MM-DD` works.
+When a block finishes, pomo adds 25 to a number in that day's daily note, `deep_work_mins` by default. It reads your Daily Notes settings (`.obsidian/daily-notes.json`) to find the note, so a custom folder or date format like `YYYY-MM-DD` works.
 
 - It changes one line of the frontmatter and leaves everything else in the file alone. If the property is missing it adds it, and if it holds something that isn't a number it leaves the note untouched.
 - If today's note doesn't exist yet, the minutes wait and are written as soon as it does. It never creates a note itself, so your template still applies.
@@ -67,7 +67,7 @@ When a block finishes, ember-focus adds 25 to a number in that day's daily note,
 
 All of these are in `/config`, under each plugin.
 
-**ember-focus**: focus, short break and long break lengths, blocks before a long break, whether breaks and focus blocks start by themselves, daily goal, chimes and their volume, seconds in the band, whether the dashboard opens at start, vault path, which property to add to, minutes or one per block, and a time zone (for example `Australia/Perth`) if your computer's clock zone isn't the one you live in.
+**pomo**: focus, short break and long break lengths, blocks before a long break, whether breaks and focus blocks start by themselves, daily goal, chimes and their volume, seconds in the band, whether the dashboard opens at start, vault path, which property to add to, minutes or one per block, and a time zone (for example `Australia/Perth`) if your computer's clock zone isn't the one you live in.
 
 **ember-theme**: the faint orange glow at the foot of the window, on or off.
 
@@ -76,14 +76,14 @@ All of these are in `/config`, under each plugin.
 Everything is plain TypeScript.
 
 - Colours are in `plugins/ember-theme/hooks/register.ts`. Change the hex values and keep `make-colors.js` as it is, since it builds the full palette from those few colours and checks the contrast.
-- The timer's logic is in `plugins/ember-focus/hooks/timer.ts` and `focus.ts`, and the dashboard is in `register.tsx`.
-- The chimes are two short WAV files in `plugins/ember-focus/sounds/`. Swap in your own.
+- The timer's logic is in `plugins/pomo/hooks/timer.ts` and `focus.ts`, and the dashboard is in `register.tsx`.
+- The chimes are two short WAV files in `plugins/pomo/sounds/`. Swap in your own.
 
 To check a change:
 
 ```bash
-claude plugin validate plugins/ember-focus
-claude plugin test plugins/ember-focus
+claude plugin validate plugins/pomo
+claude plugin test plugins/pomo
 ```
 
 ## Licence

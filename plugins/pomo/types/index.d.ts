@@ -40,6 +40,6 @@ export type View = {
 
 declare module 'claude-code' {
   interface PluginState {
-    'ember-focus': { view: Shaped<View | null> }
+    'pomo': { view: Shaped<View | null> }
   }
 }

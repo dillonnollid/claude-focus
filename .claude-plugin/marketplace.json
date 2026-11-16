@@ -1,13 +1,15 @@
 {
   "name": "claude-focus",
-  "owner": { "name": "Dillon Rosenkranz" },
+  "owner": {
+    "name": "Dillon Rosenkranz"
+  },
   "metadata": {
     "description": "A focus dashboard and a warm dark theme for Claude Code."
   },
   "plugins": [
     {
-      "name": "ember-focus",
-      "source": "./plugins/ember-focus",
+      "name": "pomo",
+      "source": "./plugins/pomo",
       "description": "A focus dashboard beside the chat with a live pomodoro countdown, buttons, daily progress, the week at a glance, soft chimes and optional logging to your Obsidian daily note."
     },
     {

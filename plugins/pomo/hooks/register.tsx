@@ -6,7 +6,7 @@ import { createFocus, settingsFrom } from './focus'
 import type { Focus, Io } from './focus'
 import { dots, formatLeft, remaining } from './timer'
 
-const view = atom({ plugin: 'ember-focus', key: 'view' } as const, null, { shape: 'view-2' })
+const view = atom({ plugin: 'pomo', key: 'view' } as const, null, { shape: 'view-2' })
 
 const PANE = 'focus'
 const TITLE = 'Focus'

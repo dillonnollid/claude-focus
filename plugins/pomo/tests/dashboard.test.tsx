@@ -2,7 +2,7 @@ import type { On } from 'claude-code'
 import { expect, mock, test } from 'claude-code/testing'
 
 const PANE = {
-  plugin: 'ember-focus',
+  plugin: 'pomo',
   component: 'Pane',
   requestId: 'focus',
   props: {
@@ -16,7 +16,7 @@ const PANE = {
 } as const
 
 const BAND = {
-  plugin: 'ember-focus',
+  plugin: 'pomo',
   component: 'AbovePrompt',
   props: { hasSurvey: false, isCollapsed: false, isWorking: false, maxRows: 10, bodyColumns: 60, scroll: { offset: 0, bodyRows: 10 }, view: {} },
 } as const
