@@ -1,0 +1,119 @@
+{
+  "name": "ember-focus",
+  "version": "0.1.0",
+  "description": "A focus dashboard beside the chat: a live pomodoro countdown with buttons, today's progress, the week at a glance, gentle chimes, and optional logging to your Obsidian daily note.",
+  "author": {
+    "name": "Dillon Rosenkranz"
+  },
+  "license": "MIT",
+  "keywords": [
+    "pomodoro",
+    "focus",
+    "timer",
+    "productivity",
+    "obsidian"
+  ],
+  "types": "./types/index.d.ts",
+  "userConfig": {
+    "openOnStart": {
+      "type": "boolean",
+      "title": "Open the dashboard at start",
+      "description": "Open the focus dashboard beside the chat when a session starts.",
+      "default": true
+    },
+    "focusMinutes": {
+      "type": "number",
+      "title": "Focus minutes",
+      "description": "Length of one focus block.",
+      "default": 25
+    },
+    "shortBreakMinutes": {
+      "type": "number",
+      "title": "Short break minutes",
+      "description": "Break after each focus block.",
+      "default": 5
+    },
+    "longBreakMinutes": {
+      "type": "number",
+      "title": "Long break minutes",
+      "description": "Break after every set of blocks.",
+      "default": 15
+    },
+    "longBreakEvery": {
+      "type": "number",
+      "title": "Blocks per set",
+      "description": "How many focus blocks come before a long break.",
+      "default": 4
+    },
+    "autoStartBreaks": {
+      "type": "boolean",
+      "title": "Start breaks by themselves",
+      "description": "When a focus block ends, the break starts straight away.",
+      "default": true
+    },
+    "autoStartFocus": {
+      "type": "boolean",
+      "title": "Start focus by itself after a break",
+      "description": "Off means you choose when the next block starts.",
+      "default": false
+    },
+    "dailyGoal": {
+      "type": "number",
+      "title": "Daily goal",
+      "description": "Focus blocks to aim for each day. 0 hides the goal.",
+      "default": 8
+    },
+    "sound": {
+      "type": "boolean",
+      "title": "Chimes",
+      "description": "A soft chime when a block or a break ends.",
+      "default": true
+    },
+    "volume": {
+      "type": "number",
+      "title": "Chime volume",
+      "description": "From 0 to 1.",
+      "default": 0.6
+    },
+    "showSeconds": {
+      "type": "boolean",
+      "title": "Show seconds",
+      "description": "Off shows minutes only, which is less to watch.",
+      "default": false
+    },
+    "showWhenIdle": {
+      "type": "boolean",
+      "title": "Show when idle",
+      "description": "Keep a quiet Start button above the prompt between blocks.",
+      "default": true
+    },
+    "vaultPath": {
+      "type": "string",
+      "title": "Obsidian vault",
+      "description": "Absolute path to your vault, to log blocks from any folder. Empty logs only when the session runs inside a vault. \"off\" turns logging off.",
+      "default": ""
+    },
+    "vaultProperty": {
+      "type": "string",
+      "title": "Daily note property",
+      "description": "The frontmatter number each finished block adds to.",
+      "default": "deep_work_mins"
+    },
+    "vaultUnit": {
+      "type": "string",
+      "title": "Log as",
+      "description": "Add the block's minutes, or 1 per block.",
+      "default": "minutes",
+      "options": [
+        "minutes",
+        "sessions"
+      ]
+    },
+    "timeZone": {
+      "type": "string",
+      "title": "Time zone",
+      "description": "An IANA zone such as Australia/Perth, for which day a block counts on. Empty uses this computer's.",
+      "default": ""
+    }
+  }
+}

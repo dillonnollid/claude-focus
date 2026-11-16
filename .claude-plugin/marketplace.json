@@ -1,0 +1,19 @@
+{
+  "name": "claude-focus",
+  "owner": { "name": "Dillon Rosenkranz" },
+  "metadata": {
+    "description": "A focus dashboard and a warm dark theme for Claude Code."
+  },
+  "plugins": [
+    {
+      "name": "ember-focus",
+      "source": "./plugins/ember-focus",
+      "description": "A focus dashboard beside the chat with a live pomodoro countdown, buttons, daily progress, the week at a glance, soft chimes and optional logging to your Obsidian daily note."
+    },
+    {
+      "name": "ember-theme",
+      "source": "./plugins/ember-theme",
+      "description": "A warm, dark-only theme for long sessions. Charcoal, ember orange and cream text, with no blue anywhere."
+    }
+  ]
+}
