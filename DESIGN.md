@@ -1,52 +1,57 @@
 # Design
 
-How both mods look, and why. The rules follow [unslop](https://github.com/heydamir/unslop) by Damir Sokolovsky ([@heydamir](https://x.com/heydamir)), CC BY 4.0. Keep this credit if you copy them.
+How both mods look, and why. The colour rules start from [unslop](https://github.com/heydamir/unslop) by Damir Sokolovsky ([@heydamir](https://x.com/heydamir)), CC BY 4.0. Keep this credit if you copy them.
 
 ## Direction
 
 - **Product.** A focus timer beside a Claude Code chat, for one person working through long sessions.
-- **Character.** Steady, unhurried, warm.
-- **World.** A desk late at night, with a stick of incense burning down beside the keyboard.
-- **Moment.** The ring. It is the one bright thing on the dashboard, and everything around it stays quiet.
-- **Signature.** The tip of the incense: a solid dot where the lit arc ends, cut out from the card by a ring of the card's colour. It appears on the ring and nowhere else.
+- **Character.** Steady, warm, a little playful.
+- **World.** A terminal late at night: chunky pixels, ASCII, and a stick of incense burning down beside the keyboard.
+- **Moments.** Cinder, the mascot, who shows what you're doing. The ring, which burns down pixel by pixel.
+- **Signature.** The ember: the one segment of the ring burning right now, Cinder's flame, the ember glyphs in the backdrop while you focus.
 
 ## Palette
 
-Warm neutrals for every surface, so you can look at them for hours. The colour lives in the accent, and the accent is used rarely.
+Warm neutrals for every surface, so you can look at them for hours. Colour lives in the moments, and each colour means one thing.
 
 | Role | Hex | Used for |
 |---|---|---|
 | Page | `#161513` | The theme's page |
 | Card | `#1c1a18` | Cards, and the ground of pomo's drawings |
 | Panel | `#232120` | Panels and fields |
-| Hairline | primary text at 8% | Card edges. Depth comes from these and from surface steps, never from shadows or glows |
-| Track | primary text at 14% | The dial's dots, empty days, the goal line |
+| Hairline | primary text at 8% | Card edges |
+| Track | primary text at 14% | Unlit segments, empty tiles, the goal line |
 | Primary text | `#efe9de` | Text and digits |
 | Secondary text | `#aaa398` | Labels, a paused or idle clock |
 | Muted text | `#9a9387` | Meta and captions |
-| Ember | `#ff7a1f` | The accent. A running focus block, today's bar, links, the selection |
-| Moss | `#b3c95a` | A break, and success. Strings in code |
+| Ember | `#ff7a1f` | Focus. Cinder, a running block, today's blocks, links, the selection |
+| Glow | `#ffb37a` | The segment burning now, a block just earned |
+| Moss | `#b3c95a` | A break, and success |
 | Amber, red, rose | `#f5b43c`, `#ef5b5e`, `#ee8aa8` | Warning, danger, and the theme's fifth role. Meaning only |
 
-The values live in `plugins/pomo/hooks/art.ts` and `plugins/ember-theme/hooks/register.ts`. A mod can't import from another mod, so they are written out in each.
+The values live in `plugins/pomo/hooks/art.ts`, `mascot.ts` and `plugins/ember-theme/hooks/register.tsx` and `scene.ts`. A mod can't import from another mod, so they are written out in each.
 
 ## Rules
 
-1. **Flat colour.** No gradients from one hue to another, no glows, no colour washes behind content, no glossy dots. A shape is one colour.
-2. **One accent per view.** On the dashboard that is the lit arc while you focus, and today's bar in the week. Other days are a neutral step. A break swaps ember for moss.
-3. **Motion tells the time.** The arc burns down, the tip travels with it, and the digits roll. Nothing loops for decoration, nothing breathes or flickers, and nothing moves on hover.
+1. **Pixels and glyphs, flat colour.** Shapes are squares on a grid and effects are ASCII characters. No gradients from one hue to another, no glows, no glossy shapes.
+2. **Motion says what's happening.** Cinder types while you focus, dozes while paused, drinks tea on a break and jumps when a block is done. The ring burns down one segment at a time. Loops stay small and slow, and every one stops under the system's reduce-motion setting.
+3. **Phase is colour.** Ember is focus, moss is a break, grey is idle or paused. The pane, Cinder, the ring and the theme's backdrop all change together.
 4. **One drawing per state.** A drawing is built when the timer changes and then runs by itself on CSS. Nothing redraws on a tick, so nothing blinks.
-5. **Sentence case, plain words.** Weights 400 and 500. Numbers in tabular figures. A button says what it does, and the toast that follows uses the same word: *park* gives *Parked*. Empty states say what to do next.
-6. **Sizes on a 4 pixel grid.** Cards round at 16, controls at 8.
+5. **The edges, not the middle.** The backdrop keeps to the sides of the window and fades out before the chat and the message box.
+6. **Plain words.** Sentence case, weights 400 and 500, a monospace face for figures and labels in the drawings. A button says what it does, and the toast that follows uses the same word.
 
 ## Pieces
 
-**The ring** (`ringSvg`). 280 by 264, radius 96. The lit arc is the time left and burns away clockwise from the top. Sixty faint dots mark the dial. The digits are four columns of glyphs that step on CSS, zero padded so the colon never moves. Under them sits what the block is for, then one pip per block of the set.
+**Cinder** (`mascotSvg`). A 20 by 18 pixel ember with a wisp of flame, drawn at 4 points a pixel. One SVG per pose: idle (blinks and bobs), focus (types, with ASCII code drifting off the keyboard), flow (headphones on, typing faster), paused (asleep, `z`s rising), break (a mug of tea, steam rising) and a jump with a burst of `*` and `+` when a break has just begun.
 
-**The day** (`daySvg`). 280 by 196. Today's count against the goal as a figure, minutes, streak and on-task share as one muted line, and the week as bars with a dotted goal line. Today is the only bar in colour.
+**The ring** (`ringSvg`). Sixty pixel segments on a dial, with the time in a 5 by 7 pixel font. Counting down, the lit segments are the time left and go out clockwise from the top, and the one burning now glows. In flow they light up instead, toward the 25 minute mark.
 
-**Native controls.** Buttons, fields and text are the app's own and take the theme's colours. One primary button per state.
+**The day** (`daySvg`). One tile per block of the daily goal, lit as you finish them, the newest blinking until you answer the check-in. Below, the week as stacked pixel bars, one cell per block, with today in ember.
+
+**The ash field** (`ashSvg`, in the theme). A scatter of `.`, `·`, `:` and `+` along the sides of the window. A few breathe slowly. While you focus, embers glow among them and specks drift up; on a break they turn to moss and slow down; paused, everything stops.
+
+**The pane.** Cinder and what you're doing at the top, then the ring and its buttons, the parked thoughts, the day, and noise and the vault on one quiet line at the foot.
 
 ## Adding something
 
-Draw it on the card with the `card` helper in `art.ts`. Use the text roles for words and a neutral step for anything that isn't the one thing that matters now. Then look at it at its real size before shipping: these cards are read at 280 pixels wide, beside a chat.
+Draw it on the card with the `card` helper in `art.ts`, on a grid, in the palette above. Ask what state each part is in and colour it by phase. Then look at it at its real size before shipping: these cards are read at 280 pixels wide, beside a chat.

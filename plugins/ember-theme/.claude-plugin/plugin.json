@@ -1,6 +1,6 @@
 {
   "name": "ember-theme",
-  "description": "A warm, dark-only theme for long sessions: quiet warm-neutral surfaces with one ember-orange accent. No blue anywhere.",
+  "description": "A warm, dark-only theme for long sessions: quiet warm-neutral surfaces, one ember-orange accent, and a faint ASCII field at the window's edges that glows while you focus with pomo. No blue anywhere.",
   "author": {
     "name": "Dillon Rosenkranz"
   },
@@ -11,5 +11,13 @@
     "warm",
     "focus",
     "low-blue-light"
-  ]
+  ],
+  "userConfig": {
+    "backdrop": {
+      "type": "boolean",
+      "title": "Ash field",
+      "description": "A faint scatter of ASCII glyphs along the edges of the window, which follows the pomo timer. Off gives a plain background.",
+      "default": true
+    }
+  }
 }

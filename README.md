@@ -3,7 +3,7 @@
 Two small mods for Claude Code, made for long sessions where you want to stay on one thing.
 
 - **pomo** turns a Claude Code session into a place to lock in. Say what the block is for and start it. Your desktop notifications go quiet, Claude keeps its answers on that task, and a ring beside the chat counts the block down. Stray thoughts get parked for the break instead of chased. Afterwards it asks how the block went, and it can log every finished block to your Obsidian daily note.
-- **ember-theme** is a dark-only theme in quiet warm neutrals with one ember-orange accent. Nothing on screen is blue, which is easier on the eyes late at night.
+- **ember-theme** is a dark-only theme in quiet warm neutrals with one ember-orange accent, and a faint field of ASCII ash at the edges of the window that glows while you focus. Nothing on screen is blue, which is easier on the eyes late at night.
 
 Both follow one small design system, written up in [DESIGN.md](DESIGN.md).
 
@@ -57,7 +57,7 @@ These are mods, which is an early-access part of Claude Code. The apps draw them
 4. **Park stray thoughts.** The field under the timer, or `/park look up flights`. A toast confirms it, the field empties for the next one, and the thought joins a dim list under the timer so you can see it landed. At the break each one gets two buttons: tick it off, or *Ask*, which puts it in the prompt box for Claude. They're also added under a *Parked* heading in that day's daily note.
 5. **Check in.** When the block ends, three buttons ask how it went: *Did it*, *Partly*, *Got distracted*. The day card shows your on-task share.
 
-The ring burns down like a stick of incense: the lit arc is the time left, and it shrinks behind its tip. It is drawn once when a block starts and runs its own clock from there, so it never blinks. Under it, the day card shows today's blocks against your goal, your minutes, streak and on-task share, and the week as bars. If a block runs over, *+5 min* extends it.
+It's all chunky pixel art. At the top, Cinder, a little pixel ember, shows what you're doing: typing while you focus, headphones on in flow, asleep when paused, a mug of tea on a break, and a jump when a block is done. The ring is sixty pixel segments that go out one by one as the block burns down, with the time in a pixel font. It is drawn once when a block starts and runs its own clock from there, so it never blinks. Under it, the day card lights a tile for each block toward your goal, above the week as stacked pixel bars. If a block runs over, *+5 min* extends it.
 
 | Command | What it does |
 |---|---|
@@ -90,20 +90,26 @@ When a block finishes, pomo adds its minutes to a number in that day's daily not
 - It finds your vault by itself. It looks first at the folder the session is in, then at the list of vaults Obsidian keeps on your computer, taking the one that's open. If it finds none, the dashboard shows a field to paste the vault's folder into. To pick a different vault, set **Obsidian vault** in `/config`. Set it to `off` to turn logging off.
 - It doesn't write from cloud sessions, because their copy of your vault is temporary.
 
+## The theme follows the timer
+
+With both installed, the ash field at the edges of the window changes with pomo: grey and still when nothing is running, embers glowing among the ash while you focus, moss and slower on a break, frozen when paused. Without pomo it stays grey.
+
 ## Settings
 
 All of these are in `/config`, under each plugin.
 
 **pomo**: the focus switch (on or off), fullscreen on Hyprland, your own commands for a block's start and end, keeping Claude on task, parked thoughts to the daily note and their heading, focus, short break and long break lengths, blocks before a long break, whether breaks and focus blocks start by themselves, daily goal, chimes and their volume, noise volume and whether it stops for breaks, seconds in the band, whether the dashboard opens at start, vault path, which property to add to, minutes or one per block, and a time zone (for example `Australia/Perth`) if your computer's clock zone isn't the one you live in.
 
+**ember-theme**: the ash field, on or off. Your system's reduce-motion setting stills it too.
+
 ## Make it yours
 
 Everything is plain TypeScript.
 
-- Colours are in `plugins/ember-theme/hooks/register.ts`. Change the hex values and keep `make-colors.js` as it is, since it builds the full palette from those few colours and checks the contrast. [DESIGN.md](DESIGN.md) says what each colour is for.
+- Colours are in `plugins/ember-theme/hooks/register.tsx`, and the ash field in `scene.ts` beside it. Change the hex values and keep `make-colors.js` as it is, since it builds the full palette from those few colours and checks the contrast. [DESIGN.md](DESIGN.md) says what each colour is for.
 - The timer's logic is in `plugins/pomo/hooks/timer.ts` and `focus.ts`, and the dashboard's layout is in `register.tsx`.
 - The chimes and noise loops are WAV files in `plugins/pomo/sounds/`. Swap in your own.
-- The ring and the day card are drawn as SVG in `plugins/pomo/hooks/art.ts`.
+- The ring and the day card are drawn as SVG in `plugins/pomo/hooks/art.ts`, and Cinder in `mascot.ts`.
 
 To check a change:
 

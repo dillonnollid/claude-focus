@@ -1,10 +1,13 @@
 import type { Register, ThemeSetArgs } from 'claude-code'
 
 import { makeColors } from './make-colors.js'
+import { ashSvg } from './scene'
+import type { Phase } from './scene'
 
 // Ember: dark only, and no blue anywhere. It follows DESIGN.md at the
-// repository root: quiet warm-neutral surfaces you can look at for hours, and
-// one accent, the orange of an ember, kept for what matters. The other roles
+// repository root: quiet warm-neutral surfaces you can look at for hours, one
+// accent, the orange of an ember, and a faint field of ASCII ash at the
+// window's edges that follows the pomo timer. The other roles
 // keep their meaning and lean warm. Code highlighting is built from them.
 // pomo's drawings hold the same values.
 const { theme, problems } = makeColors({
@@ -41,10 +44,25 @@ const { theme, problems } = makeColors({
   },
 })
 
-const LOOK: ThemeSetArgs = { colors: theme, overrideColorScheme: 'dark' }
+const SCENE = 'ash'
+const FLAT: ThemeSetArgs = { colors: theme, overrideColorScheme: 'dark' }
+// The app frosts its panels over the field, tinted to the page, so text keeps its contrast.
+const ASH: ThemeSetArgs = { ...FLAT, backdrop: { scene: SCENE, glass: { blur: 12, tint: '#161513', opacity: 0.85 } } }
 
-export const register: Register = on => {
+/** What pomo's timer is doing, read from the value pomo writes; undefined for anything else. */
+function phaseOf(written: unknown): Phase | undefined {
+  const view = (written as { value?: { timer?: { phase?: unknown } } } | null)?.value
+  const phase = view?.timer?.phase
+
+  return phase === 'idle' || phase === 'focus' || phase === 'break' || phase === 'paused' ? phase : undefined
+}
+
+export const register: Register = (on, options) => {
+  const LOOK = options.backdrop === false ? FLAT : ASH
   let lastResult = 'not set yet'
+  // The timer's phase, as last seen. Idle until pomo says otherwise, or for good without it.
+  let phase: Phase = 'idle'
+  const scenes = new Map<Phase, string>()
 
   on('session.start', async ($, e, next) => {
     const blocking = problems.find(line => line.startsWith("Desktop won't paint"))
@@ -74,6 +92,37 @@ export const register: Register = on => {
     }
 
     return next(e)
+  })
+
+  // pomo publishes its timer as a state value; watching the writes keeps the
+  // field in step with it, and needs nothing from pomo when it isn't installed.
+  on('state.set', { plugin: 'pomo', key: 'view' }, async ($, e, next) => {
+    const result = await next(e)
+    const seen = phaseOf(e.value)
+
+    if (seen !== undefined && seen !== phase) {
+      phase = seen
+
+      try {
+        $.ui.invalidate('ui.render')
+      } catch {
+        // The field catches up at its next redraw; pomo's write has landed either way.
+      }
+    }
+
+    return result
+  })
+
+  on('ui.render', { component: 'Backdrop' }, ($, e, next) => {
+    if ((e.surface !== 'desktop' && e.surface !== 'mobile') || e.props.plugin !== 'ember-theme' || e.props.scene !== SCENE) {
+      return next(e)
+    }
+
+    const { Svg } = $.ui.resolve(e)
+    const source = scenes.get(phase) ?? ashSvg(phase)
+    scenes.set(phase, source)
+
+    return <Svg source={source} alt="A faint scatter of ASCII ash along the edges of the window" isInteractive />
   })
 
   on('command.run', { command: 'ember' }, async ($, e) => {
