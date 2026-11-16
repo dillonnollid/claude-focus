@@ -2,15 +2,18 @@ import { atom, read, update } from 'claude-code'
 import type { Register } from 'claude-code'
 
 import type { View } from '../types'
-import { ringSvg, tilesSvg, weekSvg } from './art'
+import { daySvg, ringSvg } from './art'
 import { NOISES, createFocus, settingsFrom } from './focus'
 import type { Focus, Io, RunResult } from './focus'
 import { dots, elapsed, formatLeft, remaining } from './timer'
 
-const view = atom({ plugin: 'pomo', key: 'view' } as const, null, { shape: 'view-4' })
+const view = atom({ plugin: 'pomo', key: 'view' } as const, null, { shape: 'view-5' })
 
 const PANE = 'focus'
 const TITLE = 'Focus'
+// The ring keeps its own time, so it is only drawn again when the timer
+// changes; this is the longest one drawing is trusted before a fresh one.
+const RING_TRUST_MS = 5 * 60_000
 
 type Player = 'app' | 'mpv' | 'pw-play' | 'paplay' | 'ffplay'
 
@@ -56,6 +59,11 @@ export const register: Register = (on, options) => {
   // What's typed in the dashboard's fields, so a button can use it.
   let draft = ''
   let toldNoDashboard = false
+  // Each parked thought gets a new field, which is what empties the box.
+  let parkSeq = 0
+  let ring: { key: string; at: number; source: string } | undefined
+  // Bumped when the app connects, so a fresh window gets a fresh ring.
+  let mounts = 0
 
   on('session.start', async ($, e, next) => {
     // macOS plays a plugin's audio itself; Linux needs a player of its own,
@@ -77,6 +85,14 @@ export const register: Register = (on, options) => {
       read: path => $.fs.read(path),
       write: (path, text) => $.fs.write(path, text),
       home: () => $.env.get('HOME'),
+      cwd: () => $.session.cwd().catch(() => e.cwd),
+      fill: async text => {
+        // A draft already in the box is kept: the thought goes after it.
+        const box = await $.prompt.read()
+        const filled = await $.prompt.fill(box.text.trim() === '' ? { text } : { text: `\n${text}`, mode: 'append' })
+
+        return filled.isFilled
+      },
       isCloud: async () => (await $.env.get('CLAUDE_CODE_REMOTE')) === 'true',
       run: async (argv): Promise<RunResult> => {
         const { exitCode, stdout } = await $.process.run(argv, { timeoutMs: 10_000 })
@@ -141,7 +157,7 @@ export const register: Register = (on, options) => {
     }
 
     focus?.end()
-    focus = createFocus(io, s, e.cwd)
+    focus = createFocus(io, s)
     await $.command.register({
       name: 'pomo',
       description: 'Focus dashboard and pomodoro timer: start a block on something, 50, flow, pause, noise, stats',
@@ -165,6 +181,8 @@ export const register: Register = (on, options) => {
   // The app can connect after the session has started, as the desktop app
   // does. Open the dashboard then too: opening an open pane is harmless.
   on('session.attach', async ($, e, next) => {
+    mounts += 1
+
     if (openOnStart && e.surface !== 'terminal') {
       void $.ui.open({ id: PANE, title: TITLE }).catch(() => undefined)
     }
@@ -203,7 +221,7 @@ export const register: Register = (on, options) => {
     const hint =
       opened.isPlaced || toldNoDashboard
         ? ''
-        : '\n(No dashboard in this session: the app only draws plugin panels in sessions on your own computer. /pomo on its own shows where things stand.)'
+        : '\n(No dashboard is drawn in this session yet. /pomo on its own shows where things stand.)'
     toldNoDashboard ||= !opened.isPlaced
 
     return { text: (await focus.command(e.args)) + hint }
@@ -218,76 +236,88 @@ export const register: Register = (on, options) => {
   }).catch(() => ({ text: 'Could not park that. Try again.' }))
 
   on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => {
-    const v = await read($, view)
+    const stored = await read($, view)
     const f = focus
     const els = $.ui.resolve(e)
     const { Box, Button, Input, Text } = els
 
-    if (v === null || f === undefined) {
+    if (stored === null || f === undefined) {
       return <Text dimColor>Starting the focus timer…</Text>
     }
 
+    // The snapshot is only published when it has news, so the time is read here.
+    const v = { ...stored, now: await $.clock.now() }
     const d = describe(v)
     const Svg = e.surface !== 'terminal' && 'Svg' in els ? els.Svg : undefined
     const round = Math.min((v.cycleDone % s.longEvery) + (d.isFocus ? 1 : 0), s.longEvery)
+    const goal = s.goal > 0 ? `${v.today} of ${s.goal} today` : `${v.today} today`
+    const label = d.isPaused ? `${d.name}, paused` : d.name
     const sub = d.isIdle
-      ? `${v.today} of ${s.goal || '-'} today`
-      : d.isFlow && d.isFocus
-        ? 'end it when you are done'
-        : d.isFocus
-          ? `round ${round} of ${s.longEvery}`
-          : 'stand up · look away'
+      ? goal
+      : d.isFocus
+        ? d.intention !== ''
+          ? d.intention
+          : d.isFlow
+            ? 'end it when you are done'
+            : `block ${round} of ${s.longEvery}`
+        : 'stand up, look far away'
 
     // The small form of a minimized pane on the desktop: a glance, no form.
     if (e.props.placement === 'widget') {
       return (
         <Box flexDirection="column">
           <Text color={d.color} weight="semibold" size="caption">
-            {d.isPaused ? `${d.name} · paused` : d.name}
+            {label}
           </Text>
           <Text size="title" weight="bold" tabular>
             {d.isFlow && d.isFocus ? `${Math.floor(d.done / 60_000)} min` : formatLeft(d.isIdle ? s.focusMs : d.left, false)}
           </Text>
           <Text dimColor size="caption">
-            {v.today}/{s.goal || '-'} today
+            {goal}
           </Text>
         </Box>
       )
     }
 
-    const flowMark = 25 * 60_000
-    const hero =
-      Svg !== undefined ? (
-        <Box flexDirection="column" alignItems="center">
-          <Svg
-            source={ringSvg({
-              phase: d.ringPhase,
-              label: d.isPaused ? `${d.name} · paused` : d.name,
-              sub,
-              elapsedMs: d.isIdle ? 0 : d.done,
-              lengthMs: d.isIdle ? s.focusMs : d.isFlow && d.isFocus ? Math.max(flowMark, d.done + 60_000) : d.length,
-              isCountUp: d.isFlow && d.isFocus,
-              isLive: !d.isIdle && !d.isPaused,
-              now: v.now,
-              sinceStartMs: d.done,
-            })}
-            alt={`${d.name}, ${formatLeft(d.left, false)} left`}
-            width={240}
-            height={240}
-            isInteractive
-          />
-        </Box>
-      ) : (
+    let hero
+
+    if (Svg !== undefined) {
+      // One drawing per state of the timer. It animates itself from there, so
+      // redrawing the dashboard around it never restarts or blinks the clock.
+      const key = JSON.stringify([mounts, v.epoch, e.props.placement, d.t, label, sub, round, s.longEvery, d.isIdle ? s.focusMs : 0])
+
+      if (ring === undefined || ring.key !== key || v.now - ring.at > RING_TRUST_MS) {
+        ring = {
+          key,
+          at: v.now,
+          source: ringSvg({
+            phase: d.ringPhase,
+            label,
+            sub,
+            elapsedMs: d.isIdle ? 0 : d.done,
+            lengthMs: d.isIdle ? s.focusMs : d.isFlow && d.isFocus ? 25 * 60_000 : d.length,
+            isCountUp: d.isFlow && d.isFocus,
+            isLive: !d.isIdle && !d.isPaused,
+            round: d.isIdle || !d.isFocus || d.isFlow ? 0 : round,
+            rounds: d.isIdle || !d.isFocus || d.isFlow ? 0 : s.longEvery,
+          }),
+        }
+      }
+
+      hero = <Svg source={ring.source} alt={`${label}, ${formatLeft(d.isIdle ? s.focusMs : d.left, false)}${d.isIdle ? '' : ' left'}`} width={280} height={264} isInteractive />
+    } else {
+      hero = (
         <Box flexDirection="column">
           <Text color={d.color} weight="semibold">
-            {(d.isPaused ? `${d.name} · paused` : d.name).toUpperCase()}
-            <Text dimColor> · {sub}</Text>
+            {label}
+            <Text dimColor> {sub}</Text>
           </Text>
           <Text weight="bold" tabular>
             {d.isFlow && d.isFocus ? `${Math.floor(d.done / 60_000)} min in` : `${formatLeft(d.isIdle ? s.focusMs : d.left, false)}${d.isIdle ? '' : ' left'}`}
           </Text>
         </Box>
       )
+    }
 
     const startWith = (preset: 'pomodoro' | 'long' | 'flow') => () => {
       const intention = draft.trim()
@@ -317,7 +347,17 @@ export const register: Register = (on, options) => {
       </Box>
     ) : d.isFocus ? (
       <Box flexDirection="column" gap={1}>
-        {d.intention !== '' && <Text weight="medium">{d.intention}</Text>}
+        <Input
+          key={`park-${parkSeq}`}
+          placeholder="Stray thought? Park it for the break"
+          submitLabel="park"
+          autoFocus
+          onSubmit={value => {
+            // A new field next draw, empty, whatever came of this one.
+            parkSeq += 1
+            void f.park(value).finally(() => $.ui.invalidate('ui.render'))
+          }}
+        />
         <Box flexDirection="row" flexWrap="wrap" columnGap={1} rowGap={1}>
           {d.isPaused && <Button key="resume" label="Resume" variant="primary" onPress={() => void f.resume()} />}
           {!d.isPaused && d.isFlow && <Button key="done" label="Done, take a break" variant="primary" onPress={() => void f.finish()} />}
@@ -325,14 +365,6 @@ export const register: Register = (on, options) => {
           {!d.isPaused && !d.isFlow && <Button key="more" label="+5 min" onPress={() => void f.addFive()} />}
           <Button key="stop" label="Give up" dimColor onPress={() => void f.stop()} />
         </Box>
-        <Input
-          key="park"
-          placeholder="Stray thought? Park it for the break"
-          submitLabel="park"
-          onSubmit={value => {
-            void f.park(value)
-          }}
-        />
       </Box>
     ) : (
       <Box flexDirection="column" gap={1}>
@@ -353,41 +385,55 @@ export const register: Register = (on, options) => {
       </Box>
     )
 
+    // Mid-block the list only shows the thought landed; it is dealt with at the break.
+    const isHeadsDown = d.isFocus && !d.isPaused
     const parked =
-      v.parked.length > 0 && !(d.isFocus && !d.isPaused) ? (
+      v.parked.length > 0 ? (
         <Box flexDirection="column">
           <Text dimColor size="caption">
-            PARKED · {v.parked.length}
+            {isHeadsDown ? `Parked for your break (${v.parked.length})` : `Parked (${v.parked.length}). Tick it off, or hand it to Claude`}
           </Text>
-          {v.parked.map(p => (
-            <Box key={`parked-${p.id}`} flexDirection="row" columnGap={1} alignItems="center">
-              <Button key={`park-done-${p.id}`} label="✓" plain dimColor onPress={() => void f.clearParked(p.id)} />
-              <Text wrap="truncate-end">{p.text}</Text>
-            </Box>
-          ))}
+          {v.parked.map(p =>
+            isHeadsDown ? (
+              <Text key={`parked-${p.id}`} dimColor wrap="truncate-end">
+                {p.text}
+              </Text>
+            ) : (
+              <Box key={`parked-${p.id}`} flexDirection="row" columnGap={1} alignItems="center">
+                <Button key={`park-done-${p.id}`} label="✓" plain dimColor onPress={() => void f.clearParked(p.id)} />
+                <Button key={`park-ask-${p.id}`} label="Ask" plain dimColor onPress={() => void f.askParked(p.id)} />
+                <Text wrap="truncate-end">{p.text}</Text>
+              </Box>
+            ),
+          )}
         </Box>
       ) : null
 
     const [did, partly, distracted] = v.quality
     const answered = did + partly + distracted
-    const tiles = [
-      { label: 'Today', value: String(v.today), note: s.goal > 0 ? `/ ${s.goal}` : undefined, fill: s.goal > 0 ? v.today / s.goal : undefined },
-      { label: 'Minutes', value: String(v.todayMinutes) },
-      { label: 'Streak', value: String(v.streak), note: v.streak === 1 ? 'day' : 'days' },
-      { label: 'On task', value: answered === 0 ? '-' : `${Math.round(((did + partly / 2) / answered) * 100)}%` },
-    ]
     const stats =
       Svg !== undefined ? (
-        <Box flexDirection="column" gap={1}>
-          <Svg source={tilesSvg(tiles)} alt={tiles.map(t => `${t.label} ${t.value}`).join(', ')} width={280} height={72} />
-          <Svg source={weekSvg(v.week, s.goal)} alt={v.week.map(day => `${day.label} ${day.count}`).join(', ')} width={280} height={112} />
-        </Box>
+        <Svg
+          source={daySvg({
+            today: v.today,
+            goal: s.goal,
+            minutes: v.todayMinutes,
+            streak: v.streak,
+            onTask: answered === 0 ? undefined : (did + partly / 2) / answered,
+            isFocusing: d.isFocus,
+            isFresh: v.checkIn !== null,
+            week: v.week,
+          })}
+          alt={`Today ${goal}, ${v.todayMinutes} minutes, streak ${v.streak}. ${v.week.map(day => `${day.label} ${day.count}`).join(', ')}`}
+          width={280}
+          height={200}
+        />
       ) : (
         <Box flexDirection="column">
           <Text>
             <Text weight="semibold">Today </Text>
             {v.today}
-            {s.goal > 0 ? `/${s.goal}` : ''} · {v.todayMinutes} min · streak {v.streak}
+            {s.goal > 0 ? `/${s.goal}` : ''}, {v.todayMinutes} min, streak {v.streak}
             <Text dimColor> {dots(v.cycleDone, s.longEvery)}</Text>
           </Text>
           <Text dimColor>Week {v.week.map(day => `${day.label.slice(0, 2)} ${day.count}`).join('  ')}</Text>
@@ -395,22 +441,34 @@ export const register: Register = (on, options) => {
       )
 
     const noise = (
+      <Box flexDirection="row" flexWrap="wrap" columnGap={1} rowGap={1} alignItems="center">
+        <Text dimColor size="caption">
+          Noise
+        </Text>
+        {NOISES.map(kind => (
+          <Button
+            key={`noise-${kind}`}
+            label={kind === 'off' ? 'Off' : `${kind[0]?.toUpperCase()}${kind.slice(1)}`}
+            variant={v.noise === kind ? 'primary' : 'secondary'}
+            dimColor={v.noise !== kind}
+            onPress={() => void f.setNoise(kind)}
+          />
+        ))}
+      </Box>
+    )
+
+    // No vault found: ask for it here, once, instead of pointing at a settings screen.
+    const vault = v.needsVault ? (
       <Box flexDirection="column">
         <Text dimColor size="caption">
-          NOISE
+          Blocks and parked thoughts can go in your Obsidian daily note. Paste your vault's folder to turn that on.
         </Text>
-        <Box flexDirection="row" flexWrap="wrap" columnGap={1} rowGap={1}>
-          {NOISES.map(kind => (
-            <Button
-              key={`noise-${kind}`}
-              label={kind === 'off' ? 'Off' : `${kind[0]?.toUpperCase()}${kind.slice(1)}`}
-              variant={v.noise === kind ? 'primary' : 'secondary'}
-              dimColor={v.noise !== kind}
-              onPress={() => void f.setNoise(kind)}
-            />
-          ))}
-        </Box>
+        <Input key="vault" placeholder="~/Documents/My Vault" submitLabel="save" onSubmit={value => void f.setVaultPath(value)} />
       </Box>
+    ) : (
+      <Text dimColor size="footnote">
+        {[v.switchLine, v.vaultName === '' ? v.logLine : `Logging to your ${v.vaultName} vault`].filter(line => line !== '').join('. ')}
+      </Text>
     )
 
     return (
@@ -420,9 +478,7 @@ export const register: Register = (on, options) => {
         {parked}
         {stats}
         {noise}
-        <Text dimColor size="footnote">
-          {v.switchLine === '' ? v.logLine : `${v.switchLine}. ${v.logLine}`}
-        </Text>
+        {vault}
       </Box>
     )
   })
@@ -435,7 +491,7 @@ export const register: Register = (on, options) => {
     }
 
     const f = focus
-    const d = describe(v)
+    const d = describe({ ...v, now: await $.clock.now() })
 
     if (d.isIdle && !s.showWhenIdle) {
       return next(e)
@@ -448,7 +504,7 @@ export const register: Register = (on, options) => {
     if (d.isIdle) {
       return (
         <Box flexDirection="row" flexWrap="wrap" columnGap={2} alignItems="center">
-          <Text dimColor>Ready to focus · {goal}</Text>
+          <Text dimColor>Ready to focus, {goal}</Text>
           <Button key="start" label="Start focus" dimColor onPress={() => void f.start('')} />
           <Button key="open" label="Dashboard" dimColor onPress={openPane} />
         </Box>

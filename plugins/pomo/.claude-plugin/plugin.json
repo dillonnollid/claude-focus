@@ -1,6 +1,6 @@
 {
   "name": "pomo",
-  "description": "A focus dashboard for Claude Code: a live pomodoro ring with 25, 50 and flow modes, a parking lot for stray thoughts, a check-in after each block, Do Not Disturb while you focus, Claude kept on your task, brown, pink or white noise, and logging to your Obsidian daily note.",
+  "description": "A focus dashboard for Claude Code: a ring that burns down through 25, 50 or flow blocks, a parking lot for stray thoughts, a check-in after each block, Do Not Disturb while you focus, Claude kept on your task, brown, pink or white noise, and logging to your Obsidian daily note.",
   "author": {
     "name": "Dillon Rosenkranz"
   },
@@ -89,7 +89,7 @@
     "vaultPath": {
       "type": "string",
       "title": "Obsidian vault",
-      "description": "Absolute path to your vault, to log blocks from any folder. Empty logs only when the session runs inside a vault. \"off\" turns logging off.",
+      "description": "Empty finds your vault by itself: the folder the session is in, then the vault Obsidian has open. Give an absolute path to choose another. \"off\" turns logging off.",
       "default": ""
     },
     "vaultProperty": {

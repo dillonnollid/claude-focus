@@ -26,17 +26,26 @@ const RAN = { stderr: '', isStdoutTruncated: false, isStderrTruncated: false }
 
 type Mounted = { find: (q: { type?: string; key?: string; text?: string | RegExp }) => Promise<{ text: string; props: Record<string, unknown> } | undefined> }
 
-/** The ring's SVG text on a surface that draws it. */
+/** The ring's SVG text on a surface that draws it: its title says what it was drawn as. */
 async function ring(pane: Mounted): Promise<string> {
   const svg = await pane.find({ type: 'Svg' })
 
   return String(svg?.props.source ?? '')
 }
 
+/** What the ring says now, in words: the drawing itself animates between redraws. */
+async function ringNow(pane: Mounted): Promise<string> {
+  const svg = await pane.find({ type: 'Svg' })
+
+  return String(svg?.props.alt ?? '')
+}
+
 /** The engine beneath the plugin. `ran` collects every command it runs. */
 function engine(on: On, opts: { isCloud?: boolean; tools?: string[]; isPlaced?: boolean } = {}) {
   const clock = mock.clock(on, { now: START })
   const ran: string[] = []
+  const toasts: string[] = []
+  const filled: string[] = []
   mock.store(on)
   mock.env(on, opts.isCloud === false ? { HOME: '/home/me' } : { CLAUDE_CODE_REMOTE: 'true', HOME: '/home/me' })
   on('process.run', (_, e) => {
@@ -51,12 +60,22 @@ function engine(on: On, opts: { isCloud?: boolean; tools?: string[]; isPlaced?: 
   on('ui.open', () =>
     opts.isPlaced === false ? { value: { isPlaced: false, reason: 'no-surface: no surface is attached' } } : { value: { isPlaced: true } },
   )
-  on('ui.toast', () => ({ value: undefined }))
+  on('ui.toast', (_, e) => {
+    toasts.push(e.text)
+
+    return { value: undefined }
+  })
+  on('prompt.read', () => ({ value: { text: '', cursor: 0 } }))
+  on('prompt.fill', (_, e) => {
+    filled.push(e.text)
+
+    return { isFilled: true }
+  })
   on('ui.notify', () => ({ value: { isSent: false, reason: 'no-surface' } }))
   on('audio.play', () => ({ value: undefined }))
   on('session.start', (_, e) => ({ cwd: e.cwd }))
 
-  return { clock, ran }
+  return { clock, ran, toasts, filled }
 }
 
 type Runs = {
@@ -79,14 +98,13 @@ test('the dashboard draws on every surface, starts from a preset, counts down, p
 
   // The terminal draws text; the apps draw the ring and the stats as SVG.
   const term = await $.ui.mount({ ...PANE, surface: 'terminal' })
-  expect((await term.find({ type: 'Text', text: /^READY/ }))?.text).toContain('READY')
+  expect((await term.find({ type: 'Text', text: /^Ready/ }))?.text).toContain('0 of 8 today')
   expect((await term.find({ key: 'start' }))?.text).toBe('25 min')
   await term.unmount()
 
   for (const surface of ['desktop', 'mobile'] as const) {
     const pane = await $.ui.mount({ ...PANE, surface })
-    expect(await ring(pane)).toContain('>READY<')
-    expect(await ring(pane)).toContain('>25:00<')
+    expect(await ring(pane)).toContain('<title>Ready 25:00</title>')
     expect((await pane.find({ key: 'start-50' }))?.text).toBe('50 min')
     expect((await pane.find({ key: 'start-flow' }))?.text).toBe('Flow')
     expect((await pane.find({ key: 'noise-brown' }))?.text).toBe('Brown')
@@ -103,19 +121,23 @@ test('the dashboard draws on every surface, starts from a preset, counts down, p
   const pane = await $.ui.mount({ ...PANE, surface: 'desktop' })
   await $.ui.input({ plugin: 'pomo', key: 'intention', text: 'CV intro', kind: 'change' })
   await pane.press({ key: 'start-50' })
+  const drawnAtStart = await ring(pane)
+  expect(drawnAtStart).toContain('<title>Focus 50:00</title>')
+  expect(drawnAtStart).toContain('>CV intro<')
   await clock.advance(90_000)
-  expect(await ring(pane)).toContain('>FOCUS<')
-  expect(await ring(pane)).toContain('>48:30<')
-  expect((await pane.find({ type: 'Text', text: /CV intro/ }))?.text).toBe('CV intro')
+  // One drawing serves the whole block: it runs its own clock, so nothing
+  // swaps it mid-block. That swap is what made the clock blink.
+  expect(await ring(pane)).toBe(drawnAtStart)
+  expect(await ringNow(pane)).toBe('Focus, 49 min left')
 
   await pane.press({ key: 'pause' })
   await clock.advance(60_000)
-  expect(await ring(pane)).toContain('PAUSED')
-  expect(await ring(pane)).toContain('>48:30<')
+  expect(await ring(pane)).toContain('<title>Focus, paused 48:30</title>')
   await pane.press({ key: 'resume' })
   await pane.press({ key: 'more' })
+  expect(await ring(pane)).toContain('<title>Focus 53:30</title>')
   await clock.advance(30_000)
-  expect(await ring(pane)).toContain('>53:00<')
+  expect(await ringNow(pane)).toBe('Focus, 53 min left')
 
   await pane.press({ key: 'noise-brown' })
   expect((await pane.find({ key: 'noise-brown' }))?.props.variant).toBe('primary')
@@ -126,22 +148,40 @@ test(
   'a finished block counts once, asks how it went, and shows what was parked',
   { options: { focusMinutes: 2, shortBreakMinutes: 1 } },
   async ($, on) => {
-    const { clock } = engine(on)
+    const { clock, toasts, filled } = engine(on)
     await $.session.start({ cwd: '/work', surface: 'desktop', isInteractive: true })
 
     const pane = await $.ui.mount({ ...PANE, surface: 'desktop' })
     await pane.press({ key: 'start' })
-    await $.ui.input({ plugin: 'pomo', key: 'park', text: 'reply to Sam about Friday' })
+
+    // Parking answers at once: a toast, the thought in the list, and an empty box for the next.
+    expect(await pane.find({ key: 'park-0' })).toBeDefined()
+    await $.ui.input({ plugin: 'pomo', key: 'park-0', text: 'reply to Sam about Friday' })
+    expect(toasts.at(-1)).toContain('Parked')
+    expect(await pane.find({ key: 'park-0' })).toBeUndefined()
+    expect(await pane.find({ key: 'park-1' })).toBeDefined()
+    expect((await pane.find({ type: 'Text', text: /reply to Sam/ }))?.text).toBe('reply to Sam about Friday')
     expect((await run($, 'park', 'look up flights')).text).toContain('Parked')
 
-    // While focusing, parked thoughts stay out of sight.
-    expect(await pane.find({ type: 'Text', text: /reply to Sam/ })).toBeUndefined()
+    // The same thought twice is parked once.
+    await $.ui.input({ plugin: 'pomo', key: 'park-1', text: 'look up flights' })
+    expect(toasts.at(-1)).toBe('Already parked.')
+    expect(await pane.find({ key: 'park-2' })).toBeDefined()
+    expect((await pane.find({ type: 'Text', text: /Parked for your break/ }))?.text).toContain('(2)')
+
+    // Mid-block the list has nothing to press; the actions come with the break.
+    expect(await pane.find({ type: 'Button', text: 'Ask' })).toBeUndefined()
 
     await clock.advance(2 * 60_000 + 1000)
-    expect(await ring(pane)).toContain('>BREAK<')
+    expect(await ring(pane)).toContain('<title>Break 01:00</title>')
     expect((await pane.find({ type: 'Text', text: /How did that block go/ }))?.text).toBeDefined()
-    expect((await pane.find({ type: 'Text', text: /reply to Sam/ }))?.text).toBe('reply to Sam about Friday')
-    expect((await pane.find({ type: 'Text', text: /PARKED/ }))?.text).toContain('2')
+    expect((await pane.find({ type: 'Text', text: /^Parked \(2\)/ }))?.text).toContain('hand it to Claude')
+
+    // "Ask" puts the thought in the prompt box and ticks it off.
+    const ask = await pane.find({ type: 'Button', text: 'Ask' })
+    await pane.press({ key: String(ask?.props.key) })
+    expect(filled.at(-1)).toBe('reply to Sam about Friday')
+    expect((await pane.find({ type: 'Text', text: /^Parked \(1\)/ }))?.text).toBeDefined()
 
     await pane.press({ key: 'check-did' })
     expect(await pane.find({ type: 'Text', text: /How did that block go/ })).toBeUndefined()
@@ -156,7 +196,7 @@ test(
     // The break ends and the next block waits to be started.
     await clock.advance(60_000 + 1000)
     const after = await $.ui.mount({ ...PANE, surface: 'desktop' })
-    expect(await ring(after)).toContain('>READY<')
+    expect(await ring(after)).toContain('<title>Ready 02:00</title>')
     await after.unmount()
 
     const text = (await run($, 'pomo', 'stats')).text ?? ''
@@ -174,11 +214,9 @@ test('flow counts up, ends when you say, and earns a break of a fifth', async ($
   await clock.advance(40 * 60_000)
 
   const pane = await $.ui.mount({ ...PANE, surface: 'desktop' })
-  expect(await ring(pane)).toContain('>FLOW<')
-  expect(await ring(pane)).toContain('>40:00<')
+  expect(await ring(pane)).toContain('<title>Flow 40:00</title>')
   await pane.press({ key: 'done' })
-  expect(await ring(pane)).toContain('>BREAK<')
-  expect(await ring(pane)).toContain('>8:00<')
+  expect(await ring(pane)).toContain('<title>Break 08:00</title>')
   await pane.unmount()
 
   expect((await run($, 'pomo', 'stats')).text).toContain('0 h 40 min')
@@ -224,7 +262,7 @@ test('a leading number sets the length, and /pomo answers in text where no dashb
   expect((await run($, 'pomo', '')).text).toContain('Ready. Today 0 of 8 blocks')
   const started = (await run($, 'pomo', '25 learn excel basics')).text ?? ''
   expect(started).toContain('Focus on learn excel basics for 25 min.')
-  expect(started).toContain('No dashboard in this session')
+  expect(started).toContain('No dashboard is drawn in this session yet')
   expect((await run($, 'pomo', '')).text).toContain('Focus on learn excel basics, 25 min left.')
 
   await run($, 'pomo', 'stop')

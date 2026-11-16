@@ -192,3 +192,22 @@ export function addUnderHeading(text: string, heading: string, line: string): st
 
   return lines.join(eol)
 }
+
+/**
+ * The vault folders in Obsidian's own list (its `obsidian.json`), the one
+ * open now first, then the most recently opened. Empty for anything else.
+ */
+export function obsidianVaults(json: string | undefined): string[] {
+  try {
+    const raw: unknown = json === undefined ? {} : JSON.parse(json)
+    const vaults = raw !== null && typeof raw === 'object' ? (raw as { vaults?: unknown }).vaults : undefined
+    const rows = vaults !== null && typeof vaults === 'object' ? Object.values(vaults as Record<string, unknown>) : []
+
+    return rows
+      .filter((v): v is { path: string; ts?: number; open?: boolean } => v !== null && typeof v === 'object' && typeof (v as { path?: unknown }).path === 'string')
+      .sort((a, b) => Number(b.open === true) - Number(a.open === true) || (b.ts ?? 0) - (a.ts ?? 0))
+      .map(v => v.path)
+  } catch {
+    return []
+  }
+}

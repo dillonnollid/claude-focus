@@ -47,10 +47,16 @@ export type View = {
   quality: [number, number, number]
   /** When the snapshot was taken, for the time left. */
   now: number
+  /** Goes up when the clock jumped (the computer slept), so the ring is drawn afresh. */
+  epoch: number
   /** The last seven days, oldest first. */
   week: { label: string; count: number; isToday: boolean }[]
   /** One line on where finished blocks are logged. */
   logLine: string
+  /** The vault's folder name, or empty when blocks aren't being logged. */
+  vaultName: string
+  /** True when no vault was found and the dashboard should ask for one. */
+  needsVault: boolean
   /** The noise bed chosen in this session. */
   noise: 'off' | 'brown' | 'pink' | 'white'
   /** The block waiting for its check-in, if any. */

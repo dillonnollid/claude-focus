@@ -7,7 +7,7 @@
 import type { Parked, View } from '../types'
 import { IDLE, elapsed, extend, finishFlow, formatLeft, pause, remaining, resume, settle, startFocus } from './timer'
 import type { Config, Ended, Preset, Saved, Timer } from './timer'
-import { addToProperty, addUnderHeading, dayKey, dayOf, notePath, parseDailyNotes, parseDayKey } from './vault'
+import { addToProperty, addUnderHeading, dayKey, dayOf, notePath, obsidianVaults, parseDailyNotes, parseDayKey } from './vault'
 import type { DailyNotes } from './vault'
 
 export type Cancel = { cancel: () => void }
@@ -22,6 +22,10 @@ export type Io = {
   read: (path: string) => Promise<string>
   write: (path: string, text: string) => Promise<void>
   home: () => Promise<string | undefined>
+  /** The folder the session is in now, which can move after it starts. */
+  cwd: () => Promise<string>
+  /** Puts text in the prompt box as a draft; false where there is no box. */
+  fill: (text: string) => Promise<boolean>
   isCloud: () => Promise<boolean>
   /** Runs a command on this computer by its argument vector. */
   run: (argv: readonly string[]) => Promise<RunResult>
@@ -180,14 +184,16 @@ type SwitchPlan = { on: string[][]; off: string[][]; label: string; canFullscree
 
 const isFocusing = (t: Timer) => t.phase === 'focus'
 
-export function createFocus(io: Io, s: Settings, cwd: string) {
+export function createFocus(io: Io, s: Settings) {
   const dayKeyOf = (ms: number) => dayKey(dayOf(ms, s.timeZone))
-  let vault: Vault | undefined
   let plan: SwitchPlan | undefined
   let endTimer: Cancel | undefined
   let tick: (Cancel & { ms: number }) | undefined
   let chain: Promise<unknown> = Promise.resolve()
   let shown: View | undefined
+  let drawn = ''
+  let epoch = 0
+  let syncedAt = 0
   // Noise belongs to this session alone, so two open sessions never play
   // two beds over each other.
   let noise: Noise = 'off'
@@ -275,18 +281,46 @@ export function createFocus(io: Io, s: Settings, cwd: string) {
     return Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : []
   }
 
+  const hasVault = (dir: string) => io.exists(joinPath(dir, '.obsidian'))
+
+  /** Where Obsidian itself says its vaults are, the open one first. */
+  const knownVaults = async (home: string): Promise<string[]> => {
+    // ponytail: Linux and macOS only; read %APPDATA%\obsidian when someone on Windows asks.
+    const lists = [
+      '.config/obsidian/obsidian.json',
+      '.var/app/md.obsidian.Obsidian/config/obsidian/obsidian.json',
+      'snap/obsidian/current/.config/obsidian/obsidian.json',
+      'Library/Application Support/obsidian/obsidian.json',
+    ]
+
+    for (const list of lists) {
+      const path = joinPath(home, list)
+      const found = (await io.exists(path).catch(() => false)) ? obsidianVaults(await io.read(path).catch(() => undefined)) : []
+
+      if (found.length > 0) {
+        return found
+      }
+    }
+
+    return []
+  }
+
+  // Looked up fresh each time: the app can start a session in a spare folder
+  // and move it, and a vault can be set from the dashboard at any moment.
   const findVault = async (): Promise<Vault> => {
     if (s.vaultPath.toLowerCase() === 'off') {
       return { root: null, why: 'vault logging is off' }
     }
 
+    const home = (await io.home()) ?? ''
+    const saved = await io.get('vaultPath')
+    const chosen = s.vaultPath !== '' ? s.vaultPath : typeof saved === 'string' ? saved : ''
     let root: string | undefined
 
-    if (s.vaultPath !== '') {
-      const home = (await io.home()) ?? ''
-      const given = s.vaultPath.replace(/^~(?=$|[\\/])/, home)
+    if (chosen !== '') {
+      const given = chosen.replace(/^~(?=$|[\\/])/, home)
 
-      if (!(await io.exists(joinPath(given, '.obsidian')))) {
+      if (!(await hasVault(given))) {
         return { root: null, why: `there is no Obsidian vault at ${given}` }
       }
 
@@ -298,15 +332,26 @@ export function createFocus(io: Io, s: Settings, cwd: string) {
         return { root: null, why: 'this is a cloud session, and its copy of the vault is temporary' }
       }
 
-      for (let dir: string | undefined = cwd, up = 0; dir !== undefined && up < 6; dir = parentOf(dir), up += 1) {
-        if (await io.exists(joinPath(dir, '.obsidian'))) {
+      const cwd = await io.cwd().catch(() => undefined)
+
+      for (let dir = cwd, up = 0; dir !== undefined && up < 6; dir = parentOf(dir), up += 1) {
+        if (await hasVault(dir)) {
           root = dir
           break
         }
       }
 
+      if (root === undefined && home !== '') {
+        for (const dir of await knownVaults(home)) {
+          if (await hasVault(dir)) {
+            root = dir
+            break
+          }
+        }
+      }
+
       if (root === undefined) {
-        return { root: null, why: `no vault found from ${cwd}. Set "Obsidian vault" in the plugin's settings` }
+        return { root: null, why: 'no vault found on this computer' }
       }
     }
 
@@ -315,23 +360,24 @@ export function createFocus(io: Io, s: Settings, cwd: string) {
     return { root, notes: parseDailyNotes(json) }
   }
 
-  const getVault = async (): Promise<Vault> => {
-    vault ??= await findVault().catch((error: unknown): Vault => ({ root: null, why: `the vault check failed (${String(error)})` }))
-
-    return vault
-  }
+  const getVault = (): Promise<Vault> =>
+    findVault().catch((error: unknown): Vault => ({ root: null, why: `the vault check failed (${String(error)})` }))
 
   /** Writes what's owed to each day's note; a day whose note isn't there yet waits. */
   const flushVault = async (): Promise<void> => {
+    const pending = await loadRecord('pending')
+    const parkQueue = ((await io.get('parkQueue')) ?? {}) as Record<string, unknown>
+    const days = new Set([...Object.keys(pending), ...Object.keys(parkQueue)])
+
+    if (days.size === 0) {
+      return
+    }
+
     const v = await getVault()
 
     if (v.root === null) {
       return
     }
-
-    const pending = await loadRecord('pending')
-    const parkQueue = ((await io.get('parkQueue')) ?? {}) as Record<string, unknown>
-    const days = new Set([...Object.keys(pending), ...Object.keys(parkQueue)])
 
     for (const key of days) {
       const rel = notePath(v.notes, parseDayKey(key))
@@ -572,11 +618,8 @@ export function createFocus(io: Io, s: Settings, cwd: string) {
     return streak
   }
 
-  const logLine = async (): Promise<string> => {
-    const v = await getVault()
-
-    return v.root === null ? `Not logging to Obsidian: ${v.why}.` : `Logging to ${s.property} in ${joinPath(v.root, v.notes.folder || '.')}.`
-  }
+  const logLine = (v: Vault): string =>
+    v.root === null ? `Not logging to Obsidian: ${v.why}.` : `Logging to ${s.property} in ${joinPath(v.root, v.notes.folder || '.')}.`
 
   const publish = async (saved: Saved, now: number) => {
     const todayKey = dayKeyOf(now)
@@ -590,6 +633,7 @@ export function createFocus(io: Io, s: Settings, cwd: string) {
         : null
     const parked = (await loadParked()).filter(p => !p.isDone).slice(-8)
     const switchLine = await applySwitch(saved.timer).catch(() => '')
+    const vault = await getVault()
 
     shown = {
       timer: saved.timer,
@@ -599,15 +643,28 @@ export function createFocus(io: Io, s: Settings, cwd: string) {
       streak: streakOf(days, todayKey),
       quality,
       now,
+      epoch,
       week: weekOf(days, now),
-      logLine: await logLine(),
+      logLine: logLine(vault),
+      vaultName: vault.root === null ? '' : (vault.root.replace(/[\\/]+$/, '').split(/[\\/]/).pop() ?? ''),
+      // A path set in the settings that turned out wrong is explained in the log line instead.
+      needsVault: vault.root === null && s.vaultPath === '' && !(await io.isCloud()),
       noise,
       checkIn,
       parked,
       switchLine,
     }
     applyNoise(saved.timer)
-    await io.publish(shown)
+
+    // The ring runs its own clock, so a tick that changes nothing a person
+    // can read draws nothing: the dashboard only redraws when it has news.
+    const t = saved.timer
+    const face = JSON.stringify([{ ...shown, now: 0 }, formatLeft(remaining(t, now), s.showSeconds), Math.floor(elapsed(t, now) / MIN)])
+
+    if (face !== drawn) {
+      drawn = face
+      await io.publish(shown)
+    }
   }
 
   const schedule = (saved: Saved, now: number) => {
@@ -652,6 +709,14 @@ export function createFocus(io: Io, s: Settings, cwd: string) {
   const sync = () =>
     locked(async () => {
       const now = await io.now()
+
+      // A gap far longer than the tick means the computer slept: the ring's
+      // own clock stood still through it, so it gets a fresh drawing.
+      if (syncedAt !== 0 && now - syncedAt > (tick?.ms ?? 30_000) + 15_000) {
+        epoch += 1
+      }
+
+      syncedAt = now
       const { saved, ended } = settle(await loadSaved(), now, s, dayKeyOf)
 
       if (ended.length > 0) {
@@ -659,6 +724,8 @@ export function createFocus(io: Io, s: Settings, cwd: string) {
       }
 
       await handleEnded(ended, saved, now)
+      // Anything still owed to a daily note goes in once the note or the vault turns up.
+      await flushVault().catch(() => undefined)
       await publish(saved, now)
       schedule(saved, now)
 
@@ -812,6 +879,14 @@ export function createFocus(io: Io, s: Settings, cwd: string) {
       const now = await io.now()
       const day = dayKeyOf(now)
       const list = await loadParked()
+
+      // Enter pressed twice on the same thought parks it once.
+      if (list.some(p => !p.isDone && p.text === clean)) {
+        io.toast('Already parked.', 4000)
+
+        return 'Already parked.'
+      }
+
       list.push({ id: `${now.toString(36)}-${list.length}`, text: clean, at: now, day, isDone: false })
       await io.set('parked', list.slice(-100))
 
@@ -822,21 +897,59 @@ export function createFocus(io: Io, s: Settings, cwd: string) {
         await flushVault().catch(() => undefined)
       }
 
-      return `Parked. It will be there at your break.`
+      // Only say it reached the note if it did: with no vault, or no note yet, it waits.
+      const waiting = ((await io.get('parkQueue')) ?? {}) as Record<string, unknown>
+      const where = s.parkToVault && !(day in waiting) ? ' and added to your daily note' : ''
+      io.toast(`Parked${where}. Back to it.`, 4000)
+
+      return `Parked${where}. It will be there at your break.`
     }).then(async text => {
       await sync()
 
       return text
     })
 
-  const clearParked = (id: string) =>
+  const markParked = (id: string) =>
     locked(async () => {
       const list = await loadParked()
+      const one = list.find(p => p.id === id)
       await io.set(
         'parked',
         list.map(p => (p.id === id ? { ...p, isDone: true } : p)),
       )
-    }).then(() => sync())
+
+      return one
+    })
+
+  const clearParked = (id: string) => markParked(id).then(() => sync())
+
+  /** Hands a parked thought to the prompt box as a draft, and ticks it off if it got there. */
+  const askParked = async (id: string) => {
+    const one = (await loadParked()).find(p => p.id === id)
+
+    if (one !== undefined && (await io.fill(one.text).catch(() => false))) {
+      await clearParked(id)
+    }
+  }
+
+  /** Remembers the vault typed into the dashboard, if there is one there. */
+  const setVaultPath = async (path: string): Promise<string> => {
+    const home = (await io.home()) ?? ''
+    const given = path.trim().replace(/^~(?=$|[\\/])/, home).replace(/[\\/]+$/, '')
+    const isVault = given !== '' && (await hasVault(given).catch(() => false))
+    const text = isVault
+      ? `Logging to the vault at ${given}.`
+      : `No Obsidian vault at ${given || 'an empty path'}. It is the folder with a .obsidian folder inside.`
+
+    if (isVault) {
+      await io.set('vaultPath', given)
+    }
+
+    io.toast(text, 8000)
+    await sync()
+
+    return text
+  }
 
   const setNoise = (kind: Noise) =>
     locked(async () => {
@@ -845,6 +958,7 @@ export function createFocus(io: Io, s: Settings, cwd: string) {
       if (shown !== undefined) {
         shown = { ...shown, noise }
         applyNoise(shown.timer)
+        drawn = ''
         await io.publish(shown)
       }
 
@@ -895,7 +1009,7 @@ export function createFocus(io: Io, s: Settings, cwd: string) {
       ...rows,
       '',
       `This week ${total} blocks, ${Math.floor(weekMinutes / 60)} h ${weekMinutes % 60} min. Today ${days[todayKey] ?? 0}${goal}, streak ${streakOf(days, todayKey)} day(s).${quality}`,
-      (await logLine()) + wait,
+      logLine(v) + wait,
     ].join('\n')
   }
 
@@ -1015,10 +1129,7 @@ export function createFocus(io: Io, s: Settings, cwd: string) {
     }
   }
 
-  const begin = async () => {
-    await sync()
-    await flushVault().catch(() => undefined)
-  }
+  const begin = () => sync()
 
   const end = () => {
     playing?.stop()
@@ -1046,6 +1157,8 @@ export function createFocus(io: Io, s: Settings, cwd: string) {
     setNoise,
     park,
     clearParked,
+    askParked,
+    setVaultPath,
     answerCheckIn,
     taskNote,
   }
