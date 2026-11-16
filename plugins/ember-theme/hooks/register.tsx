@@ -5,7 +5,7 @@ import { ashSvg } from './scene'
 import type { Phase } from './scene'
 
 // Ember: dark only, and no blue anywhere. It follows DESIGN.md at the
-// repository root: quiet warm-neutral surfaces you can look at for hours, one
+// repository root: warm, near-black surfaces you can look at for hours, one
 // accent, the orange of an ember, and a faint field of ASCII ash at the
 // window's edges that follows the pomo timer. The other roles
 // keep their meaning and lean warm. Code highlighting is built from them.
@@ -23,13 +23,13 @@ const { theme, problems } = makeColors({
   dark: {
     gray: {
       anchors: {
-        'surface-0': '#161513', // the page
-        'surface-1': '#1c1a18', // cards
-        'surface-2': '#232120', // panels and fields
-        'surface-3': '#252320', // menus, kept close so muted text stays readable
-        'text-primary': '#efe9de',
-        'text-secondary': '#aaa398',
-        'text-muted': '#9a9387',
+        'surface-0': '#1a1310', // the page: warm, near black
+        'surface-1': '#211814', // cards
+        'surface-2': '#291e19', // panels and fields
+        'surface-3': '#2a1f19', // menus, kept close so muted text stays readable
+        'text-primary': '#f4e8d6',
+        'text-secondary': '#cdb9a2',
+        'text-muted': '#ab9784',
       },
     },
     git: {
@@ -39,7 +39,7 @@ const { theme, problems } = makeColors({
       merged: '#ee8aa8',
       closed: '#e0685c',
       conflicting: '#ff7a1f',
-      draft: '#9a9387',
+      draft: '#ab9784',
     },
   },
 })
@@ -47,7 +47,7 @@ const { theme, problems } = makeColors({
 const SCENE = 'ash'
 const FLAT: ThemeSetArgs = { colors: theme, overrideColorScheme: 'dark' }
 // The app frosts its panels over the field, tinted to the page, so text keeps its contrast.
-const ASH: ThemeSetArgs = { ...FLAT, backdrop: { scene: SCENE, glass: { blur: 12, tint: '#161513', opacity: 0.85 } } }
+const ASH: ThemeSetArgs = { ...FLAT, backdrop: { scene: SCENE, glass: { blur: 12, tint: '#1a1310', opacity: 0.85 } } }
 
 /** What pomo's timer is doing, read from the value pomo writes; undefined for anything else. */
 function phaseOf(written: unknown): Phase | undefined {

@@ -6,24 +6,24 @@ How both mods look, and why. The colour rules start from [unslop](https://github
 
 - **Product.** A focus timer beside a Claude Code chat, for one person working through long sessions.
 - **Character.** Steady, warm, a little playful.
-- **World.** A terminal late at night: chunky pixels, ASCII, and a stick of incense burning down beside the keyboard.
+- **World.** A terminal late at night: chunky pixels, ASCII, a stick of incense burning down beside the keyboard, and a 1920s rubber-hose cartoon on the screen.
 - **Moments.** Cinder, the mascot, who shows what you're doing. The ring, which burns down pixel by pixel.
 - **Signature.** The ember: the one segment of the ring burning right now, Cinder's flame, the ember glyphs in the backdrop while you focus.
 
 ## Palette
 
-Warm neutrals for every surface, so you can look at them for hours. Colour lives in the moments, and each colour means one thing.
+Warm, near-black surfaces, tinted enough that the theme is unmistakably on, and quiet enough to look at for hours. Colour lives in the moments, and each colour means one thing.
 
 | Role | Hex | Used for |
 |---|---|---|
-| Page | `#161513` | The theme's page |
-| Card | `#1c1a18` | Cards, and the ground of pomo's drawings |
-| Panel | `#232120` | Panels and fields |
+| Page | `#1a1310` | The theme's page |
+| Card | `#211814` | Cards, and the ground of pomo's drawings |
+| Panel | `#291e19` | Panels and fields |
 | Hairline | primary text at 8% | Card edges |
 | Track | primary text at 14% | Unlit segments, empty tiles, the goal line |
-| Primary text | `#efe9de` | Text and digits |
-| Secondary text | `#aaa398` | Labels, a paused or idle clock |
-| Muted text | `#9a9387` | Meta and captions |
+| Primary text | `#f4e8d6` | Text and digits |
+| Secondary text | `#cdb9a2` | Labels, a paused or idle clock |
+| Muted text | `#ab9784` | Meta and captions |
 | Ember | `#ff7a1f` | Focus. Cinder, a running block, today's blocks, links, the selection |
 | Glow | `#ffb37a` | The segment burning now, a block just earned |
 | Moss | `#b3c95a` | A break, and success |
@@ -42,7 +42,7 @@ The values live in `plugins/pomo/hooks/art.ts`, `mascot.ts` and `plugins/ember-t
 
 ## Pieces
 
-**Cinder** (`mascotSvg`). A 20 by 18 pixel ember with a wisp of flame, drawn at 4 points a pixel. One SVG per pose: idle (blinks and bobs), focus (types, with ASCII code drifting off the keyboard), flow (headphones on, typing faster), paused (asleep, `z`s rising), break (a mug of tea, steam rising) and a jump with a burst of `*` and `+` when a break has just begun.
+**Cinder** (`mascotSvg`). A 24 by 22 pixel ember with a wisp of flame, drawn at 4 points a pixel in the style of a 1920s rubber-hose cartoon: pie-cut eyes, white gloves, hose arms and big shoes. An original character, not anyone's mascot. One SVG per pose: idle (blinks and bobs), focus (types, with ASCII code drifting off the keyboard), flow (headphones on, typing faster), paused (asleep, `z`s rising), break (a mug of tea, steam rising) and a jump with a burst of `*` and `+` when a break has just begun.
 
 **The ring** (`ringSvg`). Sixty pixel segments on a dial, with the time in a 5 by 7 pixel font. Counting down, the lit segments are the time left and go out clockwise from the top, and the one burning now glows. In flow they light up instead, toward the 25 minute mark.
 
@@ -50,7 +50,7 @@ The values live in `plugins/pomo/hooks/art.ts`, `mascot.ts` and `plugins/ember-t
 
 **The ash field** (`ashSvg`, in the theme). A scatter of `.`, `·`, `:` and `+` along the sides of the window. A few breathe slowly. While you focus, embers glow among them and specks drift up; on a break they turn to moss and slow down; paused, everything stops.
 
-**The pane.** Cinder and what you're doing at the top, then the ring and its buttons, the parked thoughts, the day, and noise and the vault on one quiet line at the foot.
+**The pane.** A stack of cards, all the same colour and edge, each named by a caption: Cinder and what you're doing at the top, the ring, the controls for the moment (start a block, stay on it, or take a breather), parked thoughts, the day, and sound and notes. The drawings stretch to the pane's width. Buttons carry a glyph that says what they do: `▶` start, `❚❚` pause, `✓` done, `✕` give up, and bars for how deep each noise is.
 
 ## Adding something
 

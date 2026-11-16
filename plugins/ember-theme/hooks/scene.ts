@@ -9,7 +9,7 @@
 
 export type Phase = 'idle' | 'focus' | 'break' | 'paused'
 
-const ASH = '#efe9de'
+const ASH = '#f4e8d6'
 const EMBER = '#ff7a1f'
 const MOSS = '#b3c95a'
 const MONO = "ui-monospace, 'JetBrains Mono', 'SF Mono', Menlo, Consolas, monospace"
@@ -89,7 +89,7 @@ text { font-family: ${MONO}; font-size: 15px; text-anchor: middle; }
 @keyframes d { 0% { transform: translateY(0); opacity: 0; } 15% { opacity: 0.5; } 100% { transform: translateY(-640px); opacity: 0; } }
 @media (prefers-reduced-motion: reduce) { .b, .d { animation: none; } .d { display: none; } }
 </style>
-<rect width="${VW}" height="${VH}" fill="#161513"/>
+<rect width="${VW}" height="${VH}" fill="#1a1310"/>
 ${glyphs.join('')}
 ${drift}
 </svg>`
