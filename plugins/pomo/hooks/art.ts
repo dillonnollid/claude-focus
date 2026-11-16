@@ -9,17 +9,17 @@
 // to swap the drawing mid-block, which is what made the old clock blink.
 
 // The palette. ember-theme's register.ts holds the same values.
-const CARD = '#1c1a18'
-const HAIR = 'rgba(239, 233, 222, 0.08)'
-const TRACK = 'rgba(239, 233, 222, 0.14)'
-const TEXT = '#efe9de'
-const SECOND = '#aaa398'
-const MUTED = '#9a9387'
+const CARD = '#211814'
+const HAIR = 'rgba(244, 232, 214, 0.09)'
+const TRACK = 'rgba(244, 232, 214, 0.15)'
+const TEXT = '#f4e8d6'
+const SECOND = '#cdb9a2'
+const MUTED = '#ab9784'
 const EMBER = '#ff7a1f'
 const LIGHT = '#ffb37a'
 const MOSS = '#b3c95a'
 const MOSS_LIGHT = '#dbe8a0'
-const PAST = '#3a3631'
+const PAST = '#46352b'
 const MONO = "ui-monospace, 'JetBrains Mono', 'SF Mono', Menlo, Consolas, monospace"
 
 /** A card's ground: a flat surface with a hairline edge. */
@@ -235,7 +235,7 @@ export function ringSvg(a: RingArgs): string {
       : ''
   const isStill = a.phase === 'idle' || a.phase === 'paused'
 
-  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}">
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" width="${W * 2}" height="${H * 2}">
 <title>${esc(a.label)} ${text}</title>
 <defs><clipPath id="win"><rect x="0" y="${TOP}" width="${W}" height="${7 * P}"/></clipPath></defs>
 <style>
@@ -268,7 +268,7 @@ export type DayArgs = {
 /** Today as a row of pixel tiles toward the goal, over the week as stacked pixel bars. */
 export function daySvg(a: DayArgs): string {
   const width = W
-  const height = 200
+  const height = 220
   const top = 92
   const base = 156
   const slot = (width - 32) / Math.max(1, a.week.length)
@@ -308,15 +308,20 @@ export function daySvg(a: DayArgs): string {
       : ''
   const hint = isEmpty ? `<text x="${width / 2}" y="${(top + base) / 2 + 4}" text-anchor="middle" font-size="11.5" fill="${MUTED}">your week fills in as you finish blocks</text>` : ''
   const of = a.goal > 0 ? `/${a.goal}` : ''
-  const meta = [`${a.minutes} min`, a.streak > 1 ? `${a.streak} day streak` : '', a.onTask === undefined ? '' : `${Math.round(a.onTask * 100)}% on task`].filter(Boolean).join('  ')
+  const streak = a.streak > 1 ? `${a.streak} day streak` : a.streak === 1 ? 'first day of a streak' : 'no streak yet'
+  const onTask = a.onTask === undefined ? '' : `${Math.round(a.onTask * 100)}% on task`
+  const meta = [`${a.minutes} min`, streak, onTask].filter(Boolean).join(', ')
 
-  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${height}" width="${width}" height="${height}" font-family="${MONO}" shape-rendering="crispEdges">
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${height}" width="${width * 2}" height="${height * 2}" font-family="${MONO}" shape-rendering="crispEdges">
 <title>Today ${a.today}${of} blocks, ${meta}</title>
 <style>.new { animation: new 1s step-end infinite; } @keyframes new { 50% { fill: ${LIGHT}; } } @media (prefers-reduced-motion: reduce) { .new { animation: none; } }</style>
 ${card(width, height)}
 <text x="16" y="30" font-size="12" fill="${SECOND}">today <tspan fill="${TEXT}">${a.today}${of}</tspan></text>
-<text x="${width - 16}" y="30" text-anchor="end" font-size="11.5" fill="${MUTED}">${esc(meta)}</text>
+<text x="${width - 16}" y="30" text-anchor="end" font-size="11.5" fill="${MUTED}">${a.minutes} min</text>
 ${tileRow}
 ${goalLine}${bars}${hint}
+<line x1="16" x2="${width - 16}" y1="${height - 34}" y2="${height - 34}" stroke="${HAIR}"/>
+<text x="16" y="${height - 14}" font-size="11.5" fill="${MUTED}">${esc(streak)}</text>
+${onTask === '' ? '' : `<text x="${width - 16}" y="${height - 14}" text-anchor="end" font-size="11.5" fill="${MUTED}">${onTask}</text>`}
 </svg>`
 }

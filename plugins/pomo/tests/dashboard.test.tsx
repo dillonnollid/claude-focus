@@ -103,15 +103,15 @@ test('the dashboard draws on every surface, starts from a preset, counts down, p
   // The terminal draws text; the apps draw the ring and the stats as SVG.
   const term = await $.ui.mount({ ...PANE, surface: 'terminal' })
   expect((await term.find({ type: 'Text', text: /^Ready/ }))?.text).toContain('0 of 8 today')
-  expect((await term.find({ key: 'start' }))?.text).toBe('25 min')
+  expect((await term.find({ key: 'start' }))?.text).toBe('▶ 25 min')
   await term.unmount()
 
   for (const surface of ['desktop', 'mobile'] as const) {
     const pane = await $.ui.mount({ ...PANE, surface })
     expect(await ring(pane)).toContain('<title>Ready 25:00</title>')
-    expect((await pane.find({ key: 'start-50' }))?.text).toBe('50 min')
-    expect((await pane.find({ key: 'start-flow' }))?.text).toBe('Flow')
-    expect((await pane.find({ key: 'noise-brown' }))?.text).toBe('Brown')
+    expect((await pane.find({ key: 'start-50' }))?.text).toBe('▶▶ 50 min')
+    expect((await pane.find({ key: 'start-flow' }))?.text).toBe('∞ Flow')
+    expect((await pane.find({ key: 'noise-brown' }))?.text).toBe('▁ Brown')
     await pane.unmount()
   }
 
@@ -165,7 +165,7 @@ test(
     expect(toasts.at(-1)).toContain('Parked')
     expect(await pane.find({ key: 'park-0' })).toBeUndefined()
     expect(await pane.find({ key: 'park-1' })).toBeDefined()
-    expect((await pane.find({ type: 'Text', text: /reply to Sam/ }))?.text).toBe('reply to Sam about Friday')
+    expect((await pane.find({ type: 'Text', text: /reply to Sam/ }))?.text).toBe('· reply to Sam about Friday')
     expect((await run($, 'park', 'look up flights')).text).toContain('Parked')
 
     // The same thought twice is parked once.
@@ -180,7 +180,8 @@ test(
     await clock.advance(2 * 60_000 + 1000)
     expect(await ring(pane)).toContain('<title>Break 01:00</title>')
     expect((await pane.find({ type: 'Text', text: /How did that block go/ }))?.text).toBeDefined()
-    expect((await pane.find({ type: 'Text', text: /^Parked \(2\)/ }))?.text).toContain('hand it to Claude')
+    expect((await pane.find({ type: 'Text', text: /^Parked \(2\)/ }))?.text).toBe('Parked (2)')
+    expect((await pane.find({ type: 'Text', text: /hand it to Claude/ }))?.text).toBeDefined()
 
     // "Ask" puts the thought in the prompt box and ticks it off.
     const ask = await pane.find({ type: 'Button', text: 'Ask' })
