@@ -3,7 +3,7 @@
 Two small mods for Claude Code, made for long sessions where you want to stay on one thing.
 
 - **pomo** turns a Claude Code session into a place to lock in. Say what the block is for and start it. Your desktop notifications go quiet, Claude keeps its answers on that task, and a ring beside the chat counts the block down. Stray thoughts get parked for the break instead of chased. Afterwards it asks how the block went, and it can log every finished block to your Obsidian daily note.
-- **ember-theme** is a dark-only theme in mahogany, bone and the colours of a fire, over a hearth that glows at the foot of the window. Nothing on screen is blue, which is easier on the eyes late at night.
+- **ember-theme** is a dark-only theme in quiet warm neutrals with one ember-orange accent. Nothing on screen is blue, which is easier on the eyes late at night.
 
 Both follow one small design system, written up in [DESIGN.md](DESIGN.md).
 
@@ -57,7 +57,7 @@ These are mods, which is an early-access part of Claude Code. The apps draw them
 4. **Park stray thoughts.** The field under the timer, or `/park look up flights`. A toast confirms it, the field empties for the next one, and the thought joins a dim list under the timer so you can see it landed. At the break each one gets two buttons: tick it off, or *Ask*, which puts it in the prompt box for Claude. They're also added under a *Parked* heading in that day's daily note.
 5. **Check in.** When the block ends, three buttons ask how it went: *Did it*, *Partly*, *Got distracted*. The day card shows your on-task share.
 
-The ring burns down like a stick of incense: the lit arc is the time left, and it shrinks behind a glowing tip. It is drawn once when a block starts and runs its own clock from there, so it never blinks. Under it, the day card lights one coal per finished block toward your daily goal, above the week's bars, your streak and your on-task share. If a block runs over, *+5 min* extends it.
+The ring burns down like a stick of incense: the lit arc is the time left, and it shrinks behind its tip. It is drawn once when a block starts and runs its own clock from there, so it never blinks. Under it, the day card shows today's blocks against your goal, your minutes, streak and on-task share, and the week as bars. If a block runs over, *+5 min* extends it.
 
 | Command | What it does |
 |---|---|
@@ -96,13 +96,11 @@ All of these are in `/config`, under each plugin.
 
 **pomo**: the focus switch (on or off), fullscreen on Hyprland, your own commands for a block's start and end, keeping Claude on task, parked thoughts to the daily note and their heading, focus, short break and long break lengths, blocks before a long break, whether breaks and focus blocks start by themselves, daily goal, chimes and their volume, noise volume and whether it stops for breaks, seconds in the band, whether the dashboard opens at start, vault path, which property to add to, minutes or one per block, and a time zone (for example `Australia/Perth`) if your computer's clock zone isn't the one you live in.
 
-**ember-theme**: the hearth at the foot of the window, on or off, and the sparks that drift up from it, on or off. Your system's reduce-motion setting stills the sparks too.
-
 ## Make it yours
 
 Everything is plain TypeScript.
 
-- Colours are in `plugins/ember-theme/hooks/register.tsx`, and the hearth is drawn in `scene.ts` beside it. Change the hex values and keep `make-colors.js` as it is, since it builds the full palette from those few colours and checks the contrast. [DESIGN.md](DESIGN.md) says what each colour is for.
+- Colours are in `plugins/ember-theme/hooks/register.ts`. Change the hex values and keep `make-colors.js` as it is, since it builds the full palette from those few colours and checks the contrast. [DESIGN.md](DESIGN.md) says what each colour is for.
 - The timer's logic is in `plugins/pomo/hooks/timer.ts` and `focus.ts`, and the dashboard's layout is in `register.tsx`.
 - The chimes and noise loops are WAV files in `plugins/pomo/sounds/`. Swap in your own.
 - The ring and the day card are drawn as SVG in `plugins/pomo/hooks/art.ts`.

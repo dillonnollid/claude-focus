@@ -420,13 +420,11 @@ export const register: Register = (on, options) => {
             minutes: v.todayMinutes,
             streak: v.streak,
             onTask: answered === 0 ? undefined : (did + partly / 2) / answered,
-            isFocusing: d.isFocus,
-            isFresh: v.checkIn !== null,
             week: v.week,
           })}
           alt={`Today ${goal}, ${v.todayMinutes} minutes, streak ${v.streak}. ${v.week.map(day => `${day.label} ${day.count}`).join(', ')}`}
           width={280}
-          height={200}
+          height={196}
         />
       ) : (
         <Box flexDirection="column">
