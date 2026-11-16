@@ -34,7 +34,7 @@ async function ring(pane: Mounted): Promise<string> {
 }
 
 /** The engine beneath the plugin. `ran` collects every command it runs. */
-function engine(on: On, opts: { isCloud?: boolean; tools?: string[] } = {}) {
+function engine(on: On, opts: { isCloud?: boolean; tools?: string[]; isPlaced?: boolean } = {}) {
   const clock = mock.clock(on, { now: START })
   const ran: string[] = []
   mock.store(on)
@@ -48,7 +48,9 @@ function engine(on: On, opts: { isCloud?: boolean; tools?: string[] } = {}) {
     return { value: { exitCode: tool === undefined || isThere ? 0 : 1, stdout: '', ...RAN } }
   })
   on('command.register', (_, e) => ({ value: { command: e.name } }))
-  on('ui.open', () => ({ value: { isPlaced: true } }))
+  on('ui.open', () =>
+    opts.isPlaced === false ? { value: { isPlaced: false, reason: 'no-surface: no surface is attached' } } : { value: { isPlaced: true } },
+  )
   on('ui.toast', () => ({ value: undefined }))
   on('ui.notify', () => ({ value: { isSent: false, reason: 'no-surface' } }))
   on('audio.play', () => ({ value: undefined }))
@@ -213,4 +215,20 @@ test('Claude is told the block and its purpose while it runs, and nothing otherw
   expect(during.sections.at(-1)?.text).toContain('interview prep for civmec')
   await run($, 'pomo', 'stop')
   expect((await ask()).sections).toHaveLength(1)
+})
+
+test('a leading number sets the length, and /pomo answers in text where no dashboard is drawn', async ($, on) => {
+  engine(on, { isPlaced: false })
+  await $.session.start({ cwd: '/work', surface: null, isInteractive: true })
+
+  expect((await run($, 'pomo', '')).text).toContain('Ready. Today 0 of 8 blocks')
+  const started = (await run($, 'pomo', '25 learn excel basics')).text ?? ''
+  expect(started).toContain('Focus on learn excel basics for 25 min.')
+  expect(started).toContain('No dashboard in this session')
+  expect((await run($, 'pomo', '')).text).toContain('Focus on learn excel basics, 25 min left.')
+
+  await run($, 'pomo', 'stop')
+  expect((await run($, 'pomo', '40 min deck')).text).toContain('Focus on deck for 40 min.')
+  await run($, 'pomo', 'stop')
+  expect((await run($, 'pomo', '500 nope')).text).toContain('5 to 180 minutes')
 })

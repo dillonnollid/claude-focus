@@ -680,10 +680,17 @@ export function createFocus(io: Io, s: Settings, cwd: string) {
       }),
     )
 
-  const presetOf = (name: PresetName): Preset =>
-    name === 'flow' ? { focusMs: 0, isFlow: true } : name === 'long' ? { focusMs: 50 * MIN, breakMs: 10 * MIN } : { focusMs: s.focusMs }
+  // A number is a block of that many minutes; from 45 up it earns a break of a fifth.
+  const presetOf = (name: PresetName | number): Preset =>
+    typeof name === 'number'
+      ? { focusMs: name * MIN, ...(name >= 45 ? { breakMs: Math.round(name / 5) * MIN } : {}) }
+      : name === 'flow'
+        ? { focusMs: 0, isFlow: true }
+        : name === 'long'
+          ? { focusMs: 50 * MIN, breakMs: 10 * MIN }
+          : { focusMs: s.focusMs }
 
-  const start = (intention: string, preset: PresetName = 'pomodoro') =>
+  const start = (intention: string, preset: PresetName | number = 'pomodoro') =>
     change((saved, now) => {
       const t = saved.timer
 
@@ -892,6 +899,42 @@ export function createFocus(io: Io, s: Settings, cwd: string) {
     ].join('\n')
   }
 
+  /** The dashboard as a few lines of text, for where no dashboard is drawn. */
+  const status = async (): Promise<string> => {
+    await sync()
+    const v = shown
+
+    if (v === undefined) {
+      return 'The focus timer is still starting.'
+    }
+
+    const t = v.timer
+    const goal = s.goal > 0 ? ` of ${s.goal}` : ''
+    const today = `Today ${v.today}${goal} blocks, ${v.todayMinutes} min, streak ${v.streak}.`
+    const parked = v.parked.length > 0 ? ` ${v.parked.length} parked.` : ''
+
+    if (t.phase === 'idle') {
+      return `Ready. ${today}${parked}\nStart with /pomo <what it is for>, /pomo 50 <what>, or /pomo flow <what>.`
+    }
+
+    const isFocus = t.phase === 'focus' || (t.phase === 'paused' && t.of === 'focus')
+    const isFlow = t.isFlow === true
+    const name = isFocus ? (isFlow ? 'Flow' : 'Focus') : t.isLong ? 'Long break' : 'Break'
+    const time = isFlow && isFocus ? `${Math.floor(elapsed(t, v.now) / MIN)} min in` : `${formatLeft(remaining(t, v.now), false)} left`
+    const what = isFocus && t.intention !== '' ? ` on ${t.intention}` : ''
+    const paused = t.phase === 'paused' ? ' (paused)' : ''
+    const next = isFocus
+      ? isFlow
+        ? '/pomo done to take your break, /park <thought> for stray thoughts.'
+        : '/park <thought> for stray thoughts, /pomo pause or +5 if you need them.'
+      : v.checkIn !== null
+        ? 'How did that block go? /pomo did, /pomo partly, or /pomo distracted.'
+        : '/pomo skip to end the break early.'
+    const list = !isFocus && v.parked.length > 0 ? `\nParked:\n${v.parked.map(p => `- ${p.text}`).join('\n')}` : ''
+
+    return `${name}${what}, ${time}${paused}. ${today}${parked}\n${next}${list}`
+  }
+
   const command = async (args: string): Promise<string> => {
     const word = args.trim().toLowerCase()
 
@@ -913,12 +956,20 @@ export function createFocus(io: Io, s: Settings, cwd: string) {
         return addFive()
       case 'stats':
         return stats()
+      case 'status':
+        return status()
+      case 'did':
+      case 'did it':
+        return answerCheckIn('did')
+      case 'partly':
+        return answerCheckIn('partly')
+      case 'distracted':
+      case 'got distracted':
+        return answerCheckIn('distracted')
       case 'start':
         return start('')
       case 'flow':
         return start('', 'flow')
-      case '50':
-        return start('', 'long')
       case 'noise':
         return setNoise(noise === 'off' ? 'brown' : 'off')
       case 'noise off':
@@ -928,29 +979,38 @@ export function createFocus(io: Io, s: Settings, cwd: string) {
         return setNoise(word.slice(6) as Noise)
       case 'help':
         return [
-          '/pomo                              open the focus dashboard',
+          '/pomo                              open the dashboard, or show where things stand',
           '/pomo <what you are working on>    start a 25 minute block on it',
-          '/pomo 50 | flow                    a 50 minute block, or flow (stop when you lose the thread)',
+          '/pomo 40 <what> | flow <what>      a block of any length, or flow (stop when you are done)',
           '/pomo pause | resume | +5 | stop   stop abandons the block, and it is not counted',
           '/pomo done                         end a flow block and take the break it earned',
+          '/pomo did | partly | distracted    answer the check-in after a block',
+          '/pomo status                       where things stand, as text',
           '/pomo skip                         end a break early',
           '/pomo noise [brown|pink|white|off] a quiet noise bed, in this session only',
           '/pomo stats                        the last 7 days, and where blocks are logged',
           '/park <thought>                    park a distraction for the break',
         ].join('\n')
       default: {
-        const flow = /^flow\s+/i.exec(args.trim())
-        const fifty = /^50\s+/.exec(args.trim())
+        const rest = args.trim().replace(/^start\s+/i, '')
+        const flow = /^flow(\s+|$)/i.exec(rest)
+        const length = /^(\d{1,3})\s*(?:m|min|mins|minutes)?(?:\s+|$)/i.exec(rest)
 
         if (flow !== null) {
-          return start(args.trim().slice(flow[0].length), 'flow')
+          return start(rest.slice(flow[0].length).trim(), 'flow')
         }
 
-        if (fifty !== null) {
-          return start(args.trim().slice(fifty[0].length), 'long')
+        if (length !== null) {
+          const minutes = Number(length[1])
+
+          if (minutes < 5 || minutes > 180) {
+            return 'A block can be 5 to 180 minutes long.'
+          }
+
+          return start(rest.slice(length[0].length).trim(), minutes)
         }
 
-        return start(args.trim().replace(/^start\s+/i, ''))
+        return start(rest)
       }
     }
   }
@@ -982,6 +1042,7 @@ export function createFocus(io: Io, s: Settings, cwd: string) {
     stop,
     skip,
     stats,
+    status,
     setNoise,
     park,
     clearParked,

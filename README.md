@@ -42,7 +42,7 @@ claude plugin update ember-theme@claude-focus
 | Timer band above the prompt | yes | yes | yes |
 | Chimes and noise | macOS, and Linux with mpv, PipeWire, PulseAudio or ffplay | yes | macOS only |
 
-These are mods, which is an early-access part of Claude Code. In testing, the apps did not draw the theme for a cloud session (one running on claude.ai rather than your own computer). The timer, its commands and its counts still work there. For the full look, run the session on your own machine.
+These are mods, which is an early-access part of Claude Code. The apps draw them only for sessions running on your own computer. A cloud session (one running on claude.ai, as phone sessions usually do) gets no dashboard, band or theme, so there `/pomo` prints the dashboard as text, and every command still works. A cloud session's timer and counts live on that cloud machine, separate from your computer's.
 
 ## How a block works
 
@@ -59,13 +59,14 @@ The ring animates its own seconds, sweep and breathing glow, and the tiles show 
 
 | Command | What it does |
 |---|---|
-| `/pomo` | Open the dashboard |
+| `/pomo` | Open the dashboard. Where there isn't one (see below), it prints where things stand instead |
 | `/pomo write the intro` | Start a 25 minute block on it |
-| `/pomo 50 write the intro` or `/pomo flow write the intro` | Start a 50 minute or flow block |
+| `/pomo 40 write the intro` or `/pomo flow write the intro` | Start a block of any length from 5 to 180 minutes, or a flow block. From 45 minutes up, the break is a fifth of the block |
 | `/pomo pause`, `resume`, `+5` | Pause, carry on, or add five minutes |
 | `/pomo done` | End a flow block and take the break it earned |
 | `/pomo stop` | Give up on the block. An unfinished block isn't counted |
 | `/pomo skip` | End a break early |
+| `/pomo did`, `partly`, `distracted` | Answer the check-in without the dashboard |
 | `/park <thought>` | Park a thought for the break |
 | `/pomo noise brown` | Play a noise bed (`brown`, `pink`, `white`, or `off`) |
 | `/pomo stats` | The last seven days, your streak, and where blocks are logged |

@@ -55,6 +55,7 @@ export const register: Register = (on, options) => {
   let focus: Focus | undefined
   // What's typed in the dashboard's fields, so a button can use it.
   let draft = ''
+  let toldNoDashboard = false
 
   on('session.start', async ($, e, next) => {
     // macOS plays a plugin's audio itself; Linux needs a player of its own,
@@ -192,13 +193,20 @@ export const register: Register = (on, options) => {
     }
 
     const opened = await $.ui.open({ id: PANE, title: TITLE })
-    const seat = opened.isPlaced ? '' : `\nThe dashboard is open but not drawn here: ${opened.reason}`
 
+    // Where nothing draws the dashboard (a cloud session, as the apps show
+    // one today), /pomo answers with the dashboard as text instead.
     if (e.args.trim() === '') {
-      return { text: opened.isPlaced ? 'Focus dashboard open.' : seat.trim() }
+      return { text: opened.isPlaced ? 'Focus dashboard open.' : await focus.status() }
     }
 
-    return { text: (await focus.command(e.args)) + seat }
+    const hint =
+      opened.isPlaced || toldNoDashboard
+        ? ''
+        : '\n(No dashboard in this session: the app only draws plugin panels in sessions on your own computer. /pomo on its own shows where things stand.)'
+    toldNoDashboard ||= !opened.isPlaced
+
+    return { text: (await focus.command(e.args)) + hint }
   }).catch(() => ({ text: 'The focus timer hit an error. Run /pomo again, or restart the session.' }))
 
   on('command.run', { command: 'park' }, async ($, e) => {
