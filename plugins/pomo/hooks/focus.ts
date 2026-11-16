@@ -1,15 +1,18 @@
 // The pomodoro itself: settling the timer against the clock, counting
-// finished blocks once, chiming, logging to the vault and answering /pomo.
+// finished blocks once, chimes and noise, the focus switch, the parking lot,
+// check-ins, logging to the vault, and answering /pomo and /park.
 // It reaches the engine only through `Io`, which register.tsx builds over
-// `$`, so a test can hand it a fake clock and store.
+// `$`, so a test can hand it a fake clock, store and shell.
 
-import type { View } from '../types'
-import { IDLE, formatLeft, pause, remaining, resume, settle, startFocus } from './timer'
-import type { Config, Ended, Saved, Timer } from './timer'
-import { addToProperty, dayKey, dayOf, notePath, parseDailyNotes, parseDayKey } from './vault'
+import type { Parked, View } from '../types'
+import { IDLE, elapsed, extend, finishFlow, formatLeft, pause, remaining, resume, settle, startFocus } from './timer'
+import type { Config, Ended, Preset, Saved, Timer } from './timer'
+import { addToProperty, addUnderHeading, dayKey, dayOf, notePath, parseDailyNotes, parseDayKey } from './vault'
 import type { DailyNotes } from './vault'
 
 export type Cancel = { cancel: () => void }
+
+export type RunResult = { exitCode: number; stdout: string }
 
 export type Io = {
   now: () => Promise<number>
@@ -20,6 +23,8 @@ export type Io = {
   write: (path: string, text: string) => Promise<void>
   home: () => Promise<string | undefined>
   isCloud: () => Promise<boolean>
+  /** Runs a command on this computer by its argument vector. */
+  run: (argv: readonly string[]) => Promise<RunResult>
   toast: (text: string, timeoutMs: number) => void
   notify: (text: string) => void
   play: (asset: string, gain: number) => void
@@ -42,11 +47,22 @@ export type Settings = Config & {
   timeZone: string
   noiseGain: number
   noiseQuietInBreaks: boolean
+  focusSwitch: 'auto' | 'off'
+  fullscreen: boolean
+  startCommand: string
+  endCommand: string
+  keepOnTask: boolean
+  parkToVault: boolean
+  parkHeading: string
 }
 
 export type Noise = 'off' | 'brown' | 'pink' | 'white'
 
 export const NOISES: readonly Noise[] = ['off', 'brown', 'pink', 'white']
+
+export type PresetName = 'pomodoro' | 'long' | 'flow'
+
+export type CheckIn = 'did' | 'partly' | 'distracted'
 
 type Options = Readonly<Record<string, string | number | boolean | readonly string[]>>
 
@@ -93,6 +109,13 @@ export function settingsFrom(o: Options): Settings {
     timeZone: str(o, 'timeZone', ''),
     noiseGain: num(o, 'noiseVolume', 0.5, 0, 1),
     noiseQuietInBreaks: bool(o, 'noiseQuietInBreaks', true),
+    focusSwitch: str(o, 'focusSwitch', 'auto') === 'off' ? 'off' : 'auto',
+    fullscreen: bool(o, 'fullscreen', false),
+    startCommand: str(o, 'focusStartCommand', ''),
+    endCommand: str(o, 'focusEndCommand', ''),
+    keepOnTask: bool(o, 'keepClaudeOnTask', true),
+    parkToVault: bool(o, 'parkToVault', true),
+    parkHeading: str(o, 'parkHeading', 'Parked') || 'Parked',
   }
 }
 
@@ -119,7 +142,7 @@ function isTimer(v: unknown): v is Timer {
   return t.phase === 'paused' && common && typeof t.remainingMs === 'number'
 }
 
-function prune(days: Record<string, number>, todayKey: string, keep: number): Record<string, number> {
+function prune<T>(days: Record<string, T>, todayKey: string, keep: number): Record<string, T> {
   const t = parseDayKey(todayKey)
   const cutoff = Date.UTC(t.y, t.m - 1, t.d) - keep * 86_400_000
 
@@ -145,15 +168,26 @@ function parentOf(path: string): string | undefined {
   return cut <= 0 ? undefined : trimmed.slice(0, cut)
 }
 
+function shiftDay(key: string, by: number): string {
+  const d = parseDayKey(key)
+  const at = new Date(Date.UTC(d.y, d.m - 1, d.d) + by * 86_400_000)
+
+  return dayKey({ y: at.getUTCFullYear(), m: at.getUTCMonth() + 1, d: at.getUTCDate() })
+}
+
+/** The commands the focus switch runs, worked out once per session. */
+type SwitchPlan = { on: string[][]; off: string[][]; label: string; canFullscreen: boolean }
+
+const isFocusing = (t: Timer) => t.phase === 'focus'
+
 export function createFocus(io: Io, s: Settings, cwd: string) {
   const dayKeyOf = (ms: number) => dayKey(dayOf(ms, s.timeZone))
   let vault: Vault | undefined
+  let plan: SwitchPlan | undefined
   let endTimer: Cancel | undefined
   let tick: (Cancel & { ms: number }) | undefined
   let chain: Promise<unknown> = Promise.resolve()
-  // The last snapshot drawn, so the per-second tick only moves the clock.
   let shown: View | undefined
-  let ticks = 0
   // Noise belongs to this session alone, so two open sessions never play
   // two beds over each other.
   let noise: Noise = 'off'
@@ -194,7 +228,7 @@ export function createFocus(io: Io, s: Settings, cwd: string) {
     }
   }
 
-  const loadRecord = async (key: 'days' | 'pending'): Promise<Record<string, number>> => {
+  const loadRecord = async (key: 'days' | 'minutes' | 'pending'): Promise<Record<string, number>> => {
     const v = await io.get(key)
     const out: Record<string, number> = {}
 
@@ -207,6 +241,32 @@ export function createFocus(io: Io, s: Settings, cwd: string) {
     }
 
     return out
+  }
+
+  const loadQuality = async (): Promise<Record<string, [number, number, number]>> => {
+    const v = await io.get('quality')
+    const out: Record<string, [number, number, number]> = {}
+
+    if (v !== null && typeof v === 'object') {
+      for (const [k, n] of Object.entries(v as Record<string, unknown>)) {
+        if (Array.isArray(n) && n.length === 3 && n.every(x => typeof x === 'number')) {
+          out[k] = [n[0] as number, n[1] as number, n[2] as number]
+        }
+      }
+    }
+
+    return out
+  }
+
+  const loadParked = async (): Promise<Parked[]> => {
+    const v = await io.get('parked')
+
+    return Array.isArray(v)
+      ? v.filter(
+          (p): p is Parked =>
+            p !== null && typeof p === 'object' && typeof p.id === 'string' && typeof p.text === 'string' && typeof p.day === 'string',
+        )
+      : []
   }
 
   const loadDone = async (): Promise<string[]> => {
@@ -270,8 +330,10 @@ export function createFocus(io: Io, s: Settings, cwd: string) {
     }
 
     const pending = await loadRecord('pending')
+    const parkQueue = ((await io.get('parkQueue')) ?? {}) as Record<string, unknown>
+    const days = new Set([...Object.keys(pending), ...Object.keys(parkQueue)])
 
-    for (const [key, amount] of Object.entries(pending)) {
+    for (const key of days) {
       const rel = notePath(v.notes, parseDayKey(key))
 
       if (rel === undefined) {
@@ -279,24 +341,166 @@ export function createFocus(io: Io, s: Settings, cwd: string) {
       }
 
       const path = joinPath(v.root, rel)
-      const text = await io.read(path).catch(() => undefined)
-      const next = text === undefined ? undefined : addToProperty(text, s.property, amount)
+      let text = await io.read(path).catch(() => undefined)
 
-      if (next === undefined) {
+      if (text === undefined) {
         continue
       }
 
-      await io.write(path, next)
-      delete pending[key]
+      const amount = pending[key]
+
+      if (amount !== undefined) {
+        const next = addToProperty(text, s.property, amount)
+
+        if (next !== undefined) {
+          text = next
+          delete pending[key]
+        }
+      }
+
+      const lines = parkQueue[key]
+
+      if (Array.isArray(lines)) {
+        for (const line of lines) {
+          if (typeof line === 'string') {
+            text = addUnderHeading(text, s.parkHeading, line)
+          }
+        }
+
+        delete parkQueue[key]
+      }
+
+      await io.write(path, text)
     }
 
-    await io.set('pending', prune(pending, dayKeyOf(await io.now()), 14))
+    const todayKey = dayKeyOf(await io.now())
+    await io.set('pending', prune(pending, todayKey, 14))
+    await io.set('parkQueue', prune(parkQueue, todayKey, 14))
   }
 
   const chime = (asset: string) => {
     if (s.sound && s.gain > 0) {
       io.play(asset, s.gain)
     }
+  }
+
+  // The focus switch: Do Not Disturb, and optionally fullscreen, for the
+  // length of a focus block. Worked out once from what this computer has.
+  const has = async (tool: string) => (await io.run(['sh', '-c', `command -v ${tool}`]).catch(() => ({ exitCode: 1, stdout: '' }))).exitCode === 0
+
+  const getPlan = async (): Promise<SwitchPlan> => {
+    if (plan !== undefined) {
+      return plan
+    }
+
+    const on: string[][] = []
+    const off: string[][] = []
+    let label = ''
+
+    if (s.focusSwitch === 'auto' && !(await io.isCloud())) {
+      if (await has('makoctl')) {
+        on.push(['makoctl', 'mode', '-a', 'do-not-disturb'])
+        off.push(['makoctl', 'mode', '-r', 'do-not-disturb'])
+        label = 'Notifications silenced'
+      } else if (await has('gsettings')) {
+        on.push(['gsettings', 'set', 'org.gnome.desktop.notifications', 'show-banners', 'false'])
+        off.push(['gsettings', 'set', 'org.gnome.desktop.notifications', 'show-banners', 'true'])
+        label = 'Notifications silenced'
+      }
+    }
+
+    if (s.startCommand !== '') {
+      on.push(['sh', '-c', s.startCommand])
+      label ||= 'Focus commands ran'
+    }
+
+    if (s.endCommand !== '') {
+      off.push(['sh', '-c', s.endCommand])
+    }
+
+    const canFullscreen = s.fullscreen && !(await io.isCloud()) && (await has('hyprctl'))
+
+    plan = { on, off, label: canFullscreen && label === '' ? 'Fullscreen' : label, canFullscreen }
+
+    return plan
+  }
+
+  /** Maximizes the Claude window on Hyprland, if Claude is the window in front. */
+  const fullscreenOn = async (): Promise<string | undefined> => {
+    const active = await io.run(['hyprctl', 'activewindow', '-j']).catch(() => undefined)
+    const win = (() => {
+      try {
+        return JSON.parse(active?.stdout ?? '') as { address?: string; class?: string; title?: string; fullscreen?: number | boolean }
+      } catch {
+        return undefined
+      }
+    })()
+    const isClaude = /claude/i.test(`${win?.class ?? ''} ${win?.title ?? ''}`)
+
+    if (win?.address === undefined || !isClaude || (win.fullscreen !== undefined && win.fullscreen !== 0 && win.fullscreen !== false)) {
+      return undefined
+    }
+
+    await io.run(['hyprctl', 'dispatch', 'fullscreen', '1']).catch(() => undefined)
+
+    return win.address
+  }
+
+  const fullscreenOff = async (address: string) => {
+    const clients = await io.run(['hyprctl', 'clients', '-j']).catch(() => undefined)
+    let win: { address?: string; fullscreen?: number | boolean } | undefined
+
+    try {
+      const list = JSON.parse(clients?.stdout ?? '[]') as { address?: string; fullscreen?: number | boolean }[]
+      win = list.find(c => c.address === address)
+    } catch {
+      win = undefined
+    }
+
+    if (win === undefined || win.fullscreen === 0 || win.fullscreen === false) {
+      return
+    }
+
+    await io.run(['hyprctl', '--batch', `dispatch focuswindow address:${address} ; dispatch fullscreen 1`]).catch(() => undefined)
+  }
+
+  /** Turns the switch on for a focus block and off for anything else, once. */
+  const applySwitch = async (t: Timer): Promise<string> => {
+    const p = await getPlan()
+
+    if (p.on.length === 0 && p.off.length === 0 && !p.canFullscreen) {
+      return ''
+    }
+
+    const want = isFocusing(t)
+    const state = ((await io.get('switch')) ?? { on: false }) as { on?: boolean; address?: string }
+
+    if (state.on === want) {
+      return want ? p.label : ''
+    }
+
+    if (want) {
+      for (const argv of p.on) {
+        await io.run(argv).catch(() => undefined)
+      }
+
+      const address = p.canFullscreen ? await fullscreenOn() : undefined
+      await io.set('switch', address === undefined ? { on: true } : { on: true, address })
+
+      return p.label
+    }
+
+    for (const argv of p.off) {
+      await io.run(argv).catch(() => undefined)
+    }
+
+    if (state.address !== undefined) {
+      await fullscreenOff(state.address)
+    }
+
+    await io.set('switch', { on: false })
+
+    return ''
   }
 
   /** Counts a finished focus block once, however many sessions saw it end. */
@@ -310,13 +514,17 @@ export function createFocus(io: Io, s: Settings, cwd: string) {
     await io.set('done', [...done, ended.id].slice(-200))
 
     const key = dayKeyOf(ended.at)
+    const minutes = Math.round(ended.lengthMs / MIN)
     const days = await loadRecord('days')
     const today = (days[key] ?? 0) + 1
     days[key] = today
     await io.set('days', prune(days, key, KEEP_DAYS))
+    const mins = await loadRecord('minutes')
+    mins[key] = (mins[key] ?? 0) + minutes
+    await io.set('minutes', prune(mins, key, KEEP_DAYS))
 
     const pending = await loadRecord('pending')
-    pending[key] = (pending[key] ?? 0) + (s.unit === 'sessions' ? 1 : Math.round(ended.lengthMs / MIN))
+    pending[key] = (pending[key] ?? 0) + (s.unit === 'sessions' ? 1 : minutes)
     await io.set('pending', pending)
     await flushVault().catch(() => undefined)
 
@@ -324,14 +532,14 @@ export function createFocus(io: Io, s: Settings, cwd: string) {
       return
     }
 
+    await io.set('checkIn', { id: ended.id, intention: ended.intention, day: key })
+
     const breakMin = Math.round((after.timer.phase === 'break' ? after.timer.lengthMs : s.shortMs) / MIN)
     const goal = s.goal > 0 && today === s.goal ? ` That's your ${s.goal} for today.` : ''
-    const rest = s.autoBreaks
-      ? ` ${breakMin} min break. Stand up, get some water, look at something far away.`
-      : ' Take a break when you are ready.'
+    const rest = after.timer.phase === 'break' ? ` ${breakMin} min break. Stand up and look at something far away.` : ''
 
     chime('sounds/focus-done.wav')
-    io.toast(`Focus block done, ${today} today.${goal}${rest}`, 12_000)
+    io.toast(`${minutes} min block done, ${today} today.${goal}${rest}`, 12_000)
     io.notify(`Focus block done, ${today} today.`)
   }
 
@@ -351,55 +559,55 @@ export function createFocus(io: Io, s: Settings, cwd: string) {
     return rows
   }
 
+  const streakOf = (days: Record<string, number>, todayKey: string): number => {
+    // Today still counts as "on the way" until it ends.
+    let key = (days[todayKey] ?? 0) > 0 ? todayKey : shiftDay(todayKey, -1)
+    let streak = 0
+
+    while ((days[key] ?? 0) > 0 && streak < 1000) {
+      streak += 1
+      key = shiftDay(key, -1)
+    }
+
+    return streak
+  }
+
   const logLine = async (): Promise<string> => {
     const v = await getVault()
-    const per = s.unit === 'sessions' ? '1' : String(Math.round(s.focusMs / MIN))
 
-    return v.root === null
-      ? `Not logging to Obsidian: ${v.why}.`
-      : `Each block adds ${per} to ${s.property} in ${joinPath(v.root, v.notes.folder || '.')}.`
+    return v.root === null ? `Not logging to Obsidian: ${v.why}.` : `Logging to ${s.property} in ${joinPath(v.root, v.notes.folder || '.')}.`
   }
 
   const publish = async (saved: Saved, now: number) => {
-    const days = await loadRecord('days')
     const todayKey = dayKeyOf(now)
+    const days = await loadRecord('days')
+    const mins = await loadRecord('minutes')
+    const quality = (await loadQuality())[todayKey] ?? [0, 0, 0]
+    const rawCheck = (await io.get('checkIn')) as { id?: string; intention?: string } | undefined
+    const checkIn =
+      rawCheck !== undefined && rawCheck !== null && typeof rawCheck.id === 'string'
+        ? { id: rawCheck.id, intention: typeof rawCheck.intention === 'string' ? rawCheck.intention : '' }
+        : null
+    const parked = (await loadParked()).filter(p => !p.isDone).slice(-8)
+    const switchLine = await applySwitch(saved.timer).catch(() => '')
 
     shown = {
       timer: saved.timer,
       cycleDone: saved.cycleDay === todayKey ? saved.cycleDone : 0,
       today: days[todayKey] ?? 0,
+      todayMinutes: mins[todayKey] ?? 0,
+      streak: streakOf(days, todayKey),
+      quality,
       now,
       week: weekOf(days, now),
       logLine: await logLine(),
       noise,
+      checkIn,
+      parked,
+      switchLine,
     }
     applyNoise(saved.timer)
     await io.publish(shown)
-  }
-
-  /**
-   * The per-second tick: moves the countdown on from the last snapshot, and
-   * every fifteenth second reads the store again, which also picks up a
-   * timer another open session changed. A block's end has its own timer.
-   */
-  const onTick = () => {
-    ticks += 1
-
-    if (shown === undefined || ticks % 15 === 0) {
-      void sync()
-
-      return
-    }
-
-    const last = shown
-    void locked(async () => {
-      if (shown !== last) {
-        return
-      }
-
-      shown = { ...last, now: await io.now() }
-      await io.publish(shown)
-    })
   }
 
   const schedule = (saved: Saved, now: number) => {
@@ -414,13 +622,29 @@ export function createFocus(io: Io, s: Settings, cwd: string) {
       })
     }
 
-    // A second while running, so the dashboard counts down live; the slow
-    // idle tick picks up a timer started from another open session.
-    const ms = isRunning ? 1000 : 30_000
+    // The ring animates its own seconds, so a redraw every ten seconds keeps
+    // it honest; the slow idle tick picks up a timer another session started.
+    const ms = isRunning ? 10_000 : 30_000
 
     if (tick?.ms !== ms) {
       tick?.cancel()
-      tick = { ...io.every(ms, onTick), ms }
+      tick = { ...io.every(ms, () => void sync()), ms }
+    }
+  }
+
+  const handleEnded = async (ended: readonly Ended[], saved: Saved, now: number) => {
+    for (const one of ended) {
+      const isLate = now - one.at > LATE_MS
+
+      if (one.kind === 'focus-done') {
+        await recordFocus(one, isLate, saved)
+      } else if (!isLate) {
+        chime('sounds/break-done.wav')
+        io.toast(
+          saved.timer.phase === 'focus' ? 'Break is over. The next focus block has started.' : 'Break is over. Pick the next thing when you are ready.',
+          10_000,
+        )
+      }
     }
   }
 
@@ -434,22 +658,7 @@ export function createFocus(io: Io, s: Settings, cwd: string) {
         await io.set('timer', saved)
       }
 
-      for (const one of ended) {
-        const isLate = now - one.at > LATE_MS
-
-        if (one.kind === 'focus-done') {
-          await recordFocus(one, isLate, saved)
-        } else if (!isLate) {
-          chime('sounds/break-done.wav')
-          io.toast(
-            s.autoFocus
-              ? 'Break is over. The next focus block has started.'
-              : 'Break is over. Start the next block when you are ready.',
-            10_000,
-          )
-        }
-      }
-
+      await handleEnded(ended, saved, now)
       await publish(saved, now)
       schedule(saved, now)
 
@@ -457,12 +666,13 @@ export function createFocus(io: Io, s: Settings, cwd: string) {
     })
 
   /** Runs one change against the settled timer, then saves and redraws. */
-  const change = (fn: (saved: Saved, now: number) => { saved: Saved; text: string }) =>
+  const change = (fn: (saved: Saved, now: number) => { saved: Saved; text: string; ended?: readonly Ended[] }) =>
     sync().then(() =>
       locked(async () => {
         const now = await io.now()
-        const { saved, text } = fn(await loadSaved(), now)
+        const { saved, text, ended } = fn(await loadSaved(), now)
         await io.set('timer', saved)
+        await handleEnded(ended ?? [], saved, now)
         await publish(saved, now)
         schedule(saved, now)
 
@@ -470,13 +680,16 @@ export function createFocus(io: Io, s: Settings, cwd: string) {
       }),
     )
 
-  const start = (intention: string) =>
+  const presetOf = (name: PresetName): Preset =>
+    name === 'flow' ? { focusMs: 0, isFlow: true } : name === 'long' ? { focusMs: 50 * MIN, breakMs: 10 * MIN } : { focusMs: s.focusMs }
+
+  const start = (intention: string, preset: PresetName = 'pomodoro') =>
     change((saved, now) => {
       const t = saved.timer
 
       if (t.phase === 'focus') {
         return intention === ''
-          ? { saved, text: `Already focusing, ${formatLeft(remaining(t, now), false)} left.` }
+          ? { saved, text: 'Already focusing.' }
           : { saved: { ...saved, timer: { ...t, intention } }, text: `Now working on ${intention}.` }
       }
 
@@ -484,27 +697,54 @@ export function createFocus(io: Io, s: Settings, cwd: string) {
         return { saved: resume(saved, now), text: 'Resumed.' }
       }
 
+      const p = presetOf(preset)
       const what = intention === '' ? '' : ` on ${intention}`
+      const how = p.isFlow === true ? 'in flow mode. Stop when you lose the thread, and the break scales to match' : `for ${Math.round(p.focusMs / MIN)} min`
 
-      return {
-        saved: startFocus(saved, now, s, intention),
-        text: `Focus${what} for ${Math.round(s.focusMs / MIN)} min. Phone out of reach, one window, one thing.`,
-      }
+      return { saved: startFocus(saved, now, s, intention, p), text: `Focus${what} ${how}.` }
+    }).then(async text => {
+      // A new block clears the last one's unanswered check-in.
+      await io.set('checkIn', null)
+      await sync()
+
+      return text
     })
 
   const pauseIt = () =>
     change((saved, now) =>
       saved.timer.phase === 'focus' || saved.timer.phase === 'break'
-        ? { saved: pause(saved, now), text: `Paused with ${formatLeft(remaining(saved.timer, now), false)} left.` }
+        ? { saved: pause(saved, now), text: 'Paused.' }
         : { saved, text: 'Nothing is running.' },
     )
 
   const resumeIt = () =>
     change((saved, now) =>
-      saved.timer.phase === 'paused'
-        ? { saved: resume(saved, now), text: 'Resumed.' }
-        : { saved, text: 'Nothing is paused.' },
+      saved.timer.phase === 'paused' ? { saved: resume(saved, now), text: 'Resumed.' } : { saved, text: 'Nothing is paused.' },
     )
+
+  const addFive = () =>
+    change(saved => (saved.timer.phase === 'idle' ? { saved, text: 'Nothing is running.' } : { saved: extend(saved, 5 * MIN), text: 'Five more minutes.' }))
+
+  const finish = () =>
+    change((saved, now) => {
+      const t = saved.timer
+      const isFlow = t.phase !== 'idle' && t.isFlow === true
+
+      if (!isFlow) {
+        return { saved, text: 'Only a flow block ends early and still counts. To abandon this one, use /pomo stop.' }
+      }
+
+      const worked = elapsed(t, now)
+      const result = finishFlow(saved, now, s, dayKeyOf)
+
+      return {
+        ...result,
+        text:
+          result.ended.length > 0
+            ? `${Math.round(worked / MIN)} min of flow counted.`
+            : 'Under 5 minutes, so that one is not counted.',
+      }
+    })
 
   const stop = () =>
     change(saved => {
@@ -538,25 +778,116 @@ export function createFocus(io: Io, s: Settings, cwd: string) {
         : { saved: { ...next, timer: { phase: 'idle' } }, text: 'Break skipped.' }
     })
 
+  const answerCheckIn = (answer: CheckIn) =>
+    locked(async () => {
+      const raw = (await io.get('checkIn')) as { day?: string } | null | undefined
+      const day = typeof raw?.day === 'string' ? raw.day : dayKeyOf(await io.now())
+      const quality = await loadQuality()
+      const row = quality[day] ?? [0, 0, 0]
+      row[answer === 'did' ? 0 : answer === 'partly' ? 1 : 2] += 1
+      quality[day] = row
+      await io.set('quality', prune(quality, day, KEEP_DAYS))
+      await io.set('checkIn', null)
+    }).then(async () => {
+      await sync()
+
+      return answer === 'distracted' ? 'Noted. Park the next distraction instead of chasing it.' : 'Noted.'
+    })
+
+  const park = (text: string) =>
+    locked(async () => {
+      const clean = text.trim()
+
+      if (clean === '') {
+        return 'Nothing to park. Use /park and the thought.'
+      }
+
+      const now = await io.now()
+      const day = dayKeyOf(now)
+      const list = await loadParked()
+      list.push({ id: `${now.toString(36)}-${list.length}`, text: clean, at: now, day, isDone: false })
+      await io.set('parked', list.slice(-100))
+
+      if (s.parkToVault) {
+        const queue = ((await io.get('parkQueue')) ?? {}) as Record<string, string[]>
+        queue[day] = [...(Array.isArray(queue[day]) ? queue[day] : []), clean]
+        await io.set('parkQueue', queue)
+        await flushVault().catch(() => undefined)
+      }
+
+      return `Parked. It will be there at your break.`
+    }).then(async text => {
+      await sync()
+
+      return text
+    })
+
+  const clearParked = (id: string) =>
+    locked(async () => {
+      const list = await loadParked()
+      await io.set(
+        'parked',
+        list.map(p => (p.id === id ? { ...p, isDone: true } : p)),
+      )
+    }).then(() => sync())
+
+  const setNoise = (kind: Noise) =>
+    locked(async () => {
+      noise = kind
+
+      if (shown !== undefined) {
+        shown = { ...shown, noise }
+        applyNoise(shown.timer)
+        await io.publish(shown)
+      }
+
+      return kind === 'off' ? 'Noise off.' : `${kind[0]?.toUpperCase()}${kind.slice(1)} noise on.`
+    })
+
+  /** What Claude is told while a block runs, or undefined when none is. */
+  const taskNote = (): string | undefined => {
+    const t = shown?.timer
+
+    if (!s.keepOnTask || t === undefined || t.phase !== 'focus') {
+      return undefined
+    }
+
+    const what = t.intention === '' ? 'one task they chose' : `this, in their words: "${t.intention.slice(0, 200)}"`
+
+    return [
+      `The user is in a timed focus block (the pomo plugin), working on ${what}.`,
+      'Keep replies tight and on that task. If they ask for something unrelated, say so in one line and offer to park it for their break with `/park <the thought>` rather than starting on it, unless they say to go ahead.',
+    ].join(' ')
+  }
+
   const stats = async (): Promise<string> => {
     const now = await io.now()
+    const todayKey = dayKeyOf(now)
     const days = await loadRecord('days')
-    const mins = Math.round(s.focusMs / MIN)
+    const mins = await loadRecord('minutes')
     const week = weekOf(days, now)
     const total = week.reduce((sum, d) => sum + d.count, 0)
+    let weekMinutes = 0
+
+    for (let back = 0; back < 7; back += 1) {
+      weekMinutes += mins[shiftDay(todayKey, -back)] ?? 0
+    }
+
     const rows = week.map(d => `${d.label.padEnd(10)} ${d.count.toString().padStart(2)}  ${'●'.repeat(Math.min(d.count, 16))}`)
+    const [did, partly, distracted] = (await loadQuality())[todayKey] ?? [0, 0, 0]
+    const answered = did + partly + distracted
+    const quality = answered > 0 ? ` Check-ins today: ${did} did it, ${partly} partly, ${distracted} distracted.` : ''
+    const goal = s.goal > 0 ? ` of ${s.goal}` : ''
     const v = await getVault()
     const waiting = Object.keys(await loadRecord('pending')).length
     const wait = waiting > 0 && v.root !== null ? `\n${waiting} day(s) wait for their daily note to exist, and are written once it does.` : ''
-    const goal = s.goal > 0 ? ` of ${s.goal}` : ''
-    const today = week[week.length - 1]?.count ?? 0
 
     return [
-      `Focus blocks, last 7 days (${mins} min each)`,
+      'Focus blocks, last 7 days',
       '',
       ...rows,
       '',
-      `This week ${total} blocks, ${Math.floor((total * mins) / 60)} h ${(total * mins) % 60} min. Today ${today}${goal}.`,
+      `This week ${total} blocks, ${Math.floor(weekMinutes / 60)} h ${weekMinutes % 60} min. Today ${days[todayKey] ?? 0}${goal}, streak ${streakOf(days, todayKey)} day(s).${quality}`,
       (await logLine()) + wait,
     ].join('\n')
   }
@@ -574,10 +905,20 @@ export function createFocus(io: Io, s: Settings, cwd: string) {
         return stop()
       case 'skip':
         return skip()
+      case 'done':
+      case 'finish':
+        return finish()
+      case '+5':
+      case 'more':
+        return addFive()
       case 'stats':
         return stats()
       case 'start':
         return start('')
+      case 'flow':
+        return start('', 'flow')
+      case '50':
+        return start('', 'long')
       case 'noise':
         return setNoise(noise === 'off' ? 'brown' : 'off')
       case 'noise off':
@@ -587,15 +928,30 @@ export function createFocus(io: Io, s: Settings, cwd: string) {
         return setNoise(word.slice(6) as Noise)
       case 'help':
         return [
-          '/pomo                             open the focus dashboard',
-          '/pomo start | <what you are on>   start a focus block, or resume a paused one',
-          '/pomo pause | resume | stop       stop abandons the block, and it is not counted',
-          '/pomo skip                        end a break early',
-          '/pomo stats                       the last 7 days, and where blocks are logged',
+          '/pomo                              open the focus dashboard',
+          '/pomo <what you are working on>    start a 25 minute block on it',
+          '/pomo 50 | flow                    a 50 minute block, or flow (stop when you lose the thread)',
+          '/pomo pause | resume | +5 | stop   stop abandons the block, and it is not counted',
+          '/pomo done                         end a flow block and take the break it earned',
+          '/pomo skip                         end a break early',
           '/pomo noise [brown|pink|white|off] a quiet noise bed, in this session only',
+          '/pomo stats                        the last 7 days, and where blocks are logged',
+          '/park <thought>                    park a distraction for the break',
         ].join('\n')
-      default:
+      default: {
+        const flow = /^flow\s+/i.exec(args.trim())
+        const fifty = /^50\s+/.exec(args.trim())
+
+        if (flow !== null) {
+          return start(args.trim().slice(flow[0].length), 'flow')
+        }
+
+        if (fifty !== null) {
+          return start(args.trim().slice(fifty[0].length), 'long')
+        }
+
         return start(args.trim().replace(/^start\s+/i, ''))
+      }
     }
   }
 
@@ -603,19 +959,6 @@ export function createFocus(io: Io, s: Settings, cwd: string) {
     await sync()
     await flushVault().catch(() => undefined)
   }
-
-  const setNoise = (kind: Noise) =>
-    locked(async () => {
-      noise = kind
-
-      if (shown !== undefined) {
-        shown = { ...shown, noise }
-        applyNoise(shown.timer)
-        await io.publish(shown)
-      }
-
-      return kind === 'off' ? 'Noise off.' : `${kind[0]?.toUpperCase()}${kind.slice(1)} noise on.`
-    })
 
   const end = () => {
     playing?.stop()
@@ -626,7 +969,27 @@ export function createFocus(io: Io, s: Settings, cwd: string) {
     tick = undefined
   }
 
-  return { begin, end, sync, command, start, pause: pauseIt, resume: resumeIt, stop, skip, stats, setNoise }
+  return {
+    begin,
+    end,
+    sync,
+    command,
+    start,
+    pause: pauseIt,
+    resume: resumeIt,
+    addFive,
+    finish,
+    stop,
+    skip,
+    stats,
+    setNoise,
+    park,
+    clearParked,
+    answerCheckIn,
+    taskNote,
+  }
 }
 
 export type Focus = ReturnType<typeof createFocus>
+
+export { formatLeft, remaining }

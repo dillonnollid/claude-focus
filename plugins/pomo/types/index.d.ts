@@ -7,6 +7,10 @@ export type Running = {
   lengthMs: number
   isLong: boolean
   intention: string
+  /** A flow block: no set end, you stop it, and the break scales with it. */
+  isFlow?: boolean
+  /** The break this block earns, when it isn't the usual one (a 50 minute block). */
+  breakMs?: number
 }
 
 export type Paused = {
@@ -17,19 +21,30 @@ export type Paused = {
   lengthMs: number
   isLong: boolean
   intention: string
+  isFlow?: boolean
+  breakMs?: number
 }
 
 export type Idle = { phase: 'idle' }
 
 export type Timer = Idle | Running | Paused
 
-/** What the band draws: a snapshot the module refreshes on its tick. */
+/** A thought parked during a block, to deal with at the break. */
+export type Parked = { id: string; text: string; at: number; day: string; isDone: boolean }
+
+/** What the dashboard and the band draw: a snapshot the module refreshes. */
 export type View = {
   timer: Timer
   /** Blocks finished since the last long break. */
   cycleDone: number
   /** Focus blocks finished today. */
   today: number
+  /** Minutes of focus finished today. */
+  todayMinutes: number
+  /** Days in a row with at least one finished block. */
+  streak: number
+  /** Today's check-ins: did it, partly, got distracted. */
+  quality: [number, number, number]
   /** When the snapshot was taken, for the time left. */
   now: number
   /** The last seven days, oldest first. */
@@ -38,6 +53,12 @@ export type View = {
   logLine: string
   /** The noise bed chosen in this session. */
   noise: 'off' | 'brown' | 'pink' | 'white'
+  /** The block waiting for its check-in, if any. */
+  checkIn: { id: string; intention: string } | null
+  /** Thoughts parked and not yet dealt with, newest last. */
+  parked: Parked[]
+  /** What the focus switch is doing, or empty when it's off. */
+  switchLine: string
 }
 
 declare module 'claude-code' {

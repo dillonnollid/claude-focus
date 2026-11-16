@@ -1,6 +1,6 @@
 import { expect, mock, test } from 'claude-code/testing'
 
-import { addToProperty, notePath, parseDailyNotes } from '../hooks/vault'
+import { addToProperty, addUnderHeading, notePath, parseDailyNotes } from '../hooks/vault'
 
 const NOTE = [
   '---',
@@ -42,7 +42,7 @@ test(
       ['/vault/.obsidian/daily-notes.json', '{"folder": "00 Inbox/Daily", "format": "YYYY-MM-DD"}'],
       ['/vault/00 Inbox/Daily/2026-11-16.md', NOTE],
     ])
-    const clock = mock.clock(on, { now: Date.UTC(2026, 10, 16, 1, 0, 0) })
+    const clock = mock.clock(on, { now: Date.UTC(2026, 10, 16, 23, 50, 0) })
     mock.store(on)
     mock.env(on, { HOME: '/home/me' })
     on('fs.exists', (_, e) => ({ value: files.has(e.path) }))
@@ -60,7 +60,8 @@ test(
 
       return { value: undefined }
     })
-    on('command.register', () => ({ value: { command: 'pomo' } }))
+    on('process.run', () => ({ value: { exitCode: 1, stdout: '', stderr: '', isStdoutTruncated: false, isStderrTruncated: false } }))
+    on('command.register', (_, e) => ({ value: { command: e.name } }))
     on('ui.open', () => ({ value: { isPlaced: true } }))
     on('ui.toast', () => ({ value: undefined }))
     on('ui.notify', () => ({ value: { isSent: false, reason: 'no-surface' } }))
@@ -72,12 +73,15 @@ test(
 
     await $.session.start({ cwd: '/vault/10 Projects', surface: 'desktop', isInteractive: true })
     await run('start')
+    await $.command.run({ command: 'park', args: 'book the dentist', origin: { kind: 'composer' }, presentation: { isFullscreen: false, columns: 80 } })
     await clock.advance(61_000)
-    expect(files.get('/vault/00 Inbox/Daily/2026-11-16.md')).toContain('deep_work_mins: 1\nfog:')
-    expect(files.get('/vault/00 Inbox/Daily/2026-11-16.md')).toContain('this line is body text and stays as it is')
+    const today = files.get('/vault/00 Inbox/Daily/2026-11-16.md') ?? ''
+    expect(today).toContain('deep_work_mins: 1\nfog:')
+    expect(today).toContain('this line is body text and stays as it is')
+    expect(today.endsWith('## Parked\n\n- book the dentist\n')).toBe(true)
 
     // Tomorrow's note doesn't exist yet: the minute waits for it.
-    await clock.set(Date.UTC(2026, 10, 17, 1, 0, 0))
+    await clock.set(Date.UTC(2026, 10, 17, 0, 5, 0))
     await run('start')
     await clock.advance(61_000)
     expect(files.has('/vault/00 Inbox/Daily/2026-11-17.md')).toBe(false)
@@ -89,3 +93,9 @@ test(
     expect(files.get('/vault/00 Inbox/Daily/2026-11-17.md')).toContain('deep_work_mins: 2\nfog:')
   },
 )
+
+test('parks under an existing heading, before the next section', () => {
+  const note = '---\na: 1\n---\n# Day\n\n## Parked\n\n- first\n\n## Tasks\n\n- [ ] x\n'
+  expect(addUnderHeading(note, 'Parked', 'second')).toBe('---\na: 1\n---\n# Day\n\n## Parked\n\n- first\n- second\n\n## Tasks\n\n- [ ] x\n')
+  expect(addUnderHeading('# Day\n', 'Parked', 'only\nline')).toBe('# Day\n\n## Parked\n\n- only line\n')
+})

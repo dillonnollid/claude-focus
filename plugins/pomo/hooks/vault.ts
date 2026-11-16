@@ -160,3 +160,35 @@ export function addToProperty(text: string, property: string, amount: number): s
 function round(n: number): string {
   return Number.isInteger(n) ? n.toString() : n.toFixed(1)
 }
+
+/**
+ * Adds `- line` at the end of the `## heading` section, making the section at
+ * the end of the note when it isn't there. Only that spot changes.
+ */
+export function addUnderHeading(text: string, heading: string, line: string): string {
+  const eol = text.includes('\r\n') ? '\r\n' : '\n'
+  const lines = text.split(eol)
+  const bullet = `- ${line.replace(/\r?\n/g, ' ').trim()}`
+  const at = lines.findIndex(l => l.trim().toLowerCase() === `## ${heading}`.toLowerCase())
+
+  if (at === -1) {
+    while (lines.length > 0 && lines[lines.length - 1]?.trim() === '') {
+      lines.pop()
+    }
+
+    return [...lines, '', `## ${heading}`, '', bullet, ''].join(eol)
+  }
+
+  // The section runs to the next heading of the same or a higher level.
+  let end = lines.findIndex((l, i) => i > at && /^#{1,2}\s/.test(l))
+  end = end === -1 ? lines.length : end
+  let insert = end
+
+  while (insert > at + 1 && lines[insert - 1]?.trim() === '') {
+    insert -= 1
+  }
+
+  lines.splice(insert, 0, bullet)
+
+  return lines.join(eol)
+}
