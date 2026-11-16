@@ -3,10 +3,10 @@
 // it. It follows the Hearth design system (DESIGN.md at the repository root):
 // only fire moves, and it moves slowly enough to sit at the edge of sight.
 
-const SOOT = '#1a0f0c'
-const GOLD = '#ffcf70'
-const EMBER = '#ff7a1f'
-const GARNET = '#d93a1a'
+const SOOT = '#150b0d'
+const GOLD = '#ffc640'
+const EMBER = '#ff6a1a'
+const GARNET = '#e8341c'
 
 /** A small repeatable random source, so the scene is the same every time. */
 function seeded(seed: number): () => number {
@@ -43,7 +43,7 @@ export function hearthSvg(hasSparks: boolean): string {
 <linearGradient id="floor" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${GARNET}" stop-opacity="0"/><stop offset="1" stop-color="${EMBER}" stop-opacity="0.2"/></linearGradient>
 <radialGradient id="coal"><stop offset="0" stop-color="${GOLD}" stop-opacity="0.34"/><stop offset="1" stop-color="${EMBER}" stop-opacity="0"/></radialGradient>
 <radialGradient id="spark"><stop offset="0" stop-color="#fff3d6"/><stop offset="0.3" stop-color="${GOLD}"/><stop offset="1" stop-color="${EMBER}" stop-opacity="0"/></radialGradient>
-<linearGradient id="night" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#120a08"/><stop offset="0.5" stop-color="${SOOT}" stop-opacity="0"/></linearGradient>
+<linearGradient id="night" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#100809"/><stop offset="0.5" stop-color="${SOOT}" stop-opacity="0"/></linearGradient>
 </defs>
 <style>
 .bed { animation: breathe 11s ease-in-out infinite; }

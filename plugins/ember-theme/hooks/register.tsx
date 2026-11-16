@@ -4,42 +4,42 @@ import { makeColors } from './make-colors.js'
 import { hearthSvg } from './scene'
 
 // Ember: dark only, and no blue anywhere. It follows the Hearth design system
-// (DESIGN.md at the repository root): every surface is a shade of mahogany
-// rather than a neutral charcoal, text is the colour of bone, and the accents
+// (DESIGN.md at the repository root): every surface is the red-black of the
+// dark around a fire rather than a neutral charcoal, text is the colour of bone, and the accents
 // are the heat of a fire, from gold through ember to garnet. Code highlighting
 // is built from the same roles. pomo's drawings hold the same values.
-const SOOT = '#1a0f0c'
+const SOOT = '#150b0d'
 
 const { theme, problems } = makeColors({
   label: 'Ember',
   only: 'dark',
   roles: {
-    accent: '#ff7a1f', // ember: links, focus rings, code keywords
-    danger: '#f0524f', // still a red, a step cooler than ember so the two never blur
-    success: '#b3c95a', // moss: strings, "added", and a break in pomo
-    warning: '#ffcf70', // gold
-    pro: '#ff8fa3', // rose, in place of the usual purple
+    accent: '#ff6a1a', // ember: links, focus rings, code keywords
+    danger: '#ff4d5e', // still a red, a step cooler than ember so the two never blur
+    success: '#b6d65a', // moss: strings, "added", and a break in pomo
+    warning: '#ffc640', // gold
+    pro: '#ff7aa8', // rose, in place of the usual purple
   },
   dark: {
     gray: {
       anchors: {
         'surface-0': SOOT, // soot: the page
-        'surface-1': '#22140f', // char: cards
-        'surface-2': '#2b1a13', // bark: panels
-        'surface-3': '#2c1b13', // menus, kept close to bark so muted text stays readable
-        'text-primary': '#f6e7cf', // bone
-        'text-secondary': '#dcc4a8',
-        'text-muted': '#b89c84', // ash
+        'surface-1': '#1e1013', // char: cards
+        'surface-2': '#271519', // bark: panels
+        'surface-3': '#28161a', // menus, kept close to bark so muted text stays readable
+        'text-primary': '#fbeee4', // bone
+        'text-secondary': '#e8cdbf',
+        'text-muted': '#bd9c93', // ash
       },
     },
     git: {
-      added: '#b3c95a',
-      removed: '#f0524f',
-      modified: '#ffcf70',
-      merged: '#ff8fa3',
-      closed: '#e0685c',
-      conflicting: '#ff7a1f',
-      draft: '#b89c84',
+      added: '#b6d65a',
+      removed: '#ff4d5e',
+      modified: '#ffc640',
+      merged: '#ff7aa8',
+      closed: '#f06a5c',
+      conflicting: '#ff6a1a',
+      draft: '#bd9c93',
     },
   },
 })

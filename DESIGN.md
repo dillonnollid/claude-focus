@@ -10,23 +10,23 @@ That gives the system its one test for any new element: is it lit, or is it ash?
 
 ## Palette
 
-Every surface is a shade of mahogany. Nothing is neutral grey and nothing is blue.
+Every surface is the red-black of the dark around a fire: warm, but not brown. Nothing is neutral grey and nothing is blue.
 
 | Name | Hex | Used for |
 |---|---|---|
-| Soot | `#1a0f0c` | The page, and the tint of frosted panels |
-| Char | `#22140f` | Cards |
-| Bark | `#2b1a13` | Panels and menus |
-| Kindling | `#47291b` | Anything unlit: tracks, empty coals, days with no blocks |
-| Ash | `#b89c84` | Muted text, a paused timer |
-| Bone | `#f6e7cf` | Text and digits |
-| Gold | `#ffcf70` | The one live point: the tip of the ring, the centre of a coal. Warnings in the theme |
-| Ember | `#ff7a1f` | What counts now: the lit arc, today's bar, links, focus rings |
-| Garnet | `#d93a1a` | The cool end of the heat ramp, low on the ring and at a coal's edge |
-| Cinder | `#9a431d` | The past: other days' bars |
-| Moss | `#b3c95a` | Rest and success: a break, strings in code, "added" |
-| Rose | `#ff8fa3` | The theme's fifth role, where most themes put purple |
-| Red | `#f0524f` | Danger. A step cooler than ember so the two never blur |
+| Soot | `#150b0d` | The page, and the tint of frosted panels |
+| Char | `#1e1013` | Cards |
+| Bark | `#271519` | Panels and menus |
+| Kindling | `#45222a` | Anything unlit: tracks, empty coals, days with no blocks |
+| Ash | `#bd9c93` | Muted text, a paused timer |
+| Bone | `#fbeee4` | Text and digits |
+| Gold | `#ffc640` | The one live point: the tip of the ring, the centre of a coal. Warnings in the theme |
+| Ember | `#ff6a1a` | What counts now: the lit arc, today's bar, links, focus rings |
+| Garnet | `#e8341c` | The cool end of the heat ramp, low on the ring and at a coal's edge |
+| Cinder | `#a8381f` | The past: other days' bars |
+| Moss | `#b6d65a` | Rest and success: a break, strings in code, "added" |
+| Rose | `#ff7aa8` | The theme's fifth role, where most themes put purple |
+| Red | `#ff4d5e` | Danger. A step cooler than ember so the two never blur |
 
 The values live in `plugins/pomo/hooks/art.ts`, `plugins/ember-theme/hooks/register.tsx` and `plugins/ember-theme/hooks/scene.ts`. A mod can't import from another mod, so they are written out in each.
 

@@ -11,8 +11,8 @@ const view = atom({ plugin: 'pomo', key: 'view' } as const, null, { shape: 'view
 
 const PANE = 'focus'
 // The cards' ground and edge: Hearth's char, as in art.ts, with a warm hairline.
-const CARD = '#22140f'
-const EDGE = '#3a241a'
+const CARD = '#1e1013'
+const EDGE = '#3a1c22'
 const TITLE = 'Focus'
 // The ring keeps its own time, so it is only drawn again when the timer
 // changes; this is the longest one drawing is trusted before a fresh one.
@@ -287,6 +287,8 @@ export const register: Register = (on, options) => {
     if (Svg !== undefined) {
       // One drawing per state of the timer. It animates itself from there, so
       // redrawing the dashboard around it never restarts or blinks the clock.
+      // Drawn as an image, as the day card is, so it stretches to the same width;
+      // an image still runs its CSS animations.
       const key = JSON.stringify([mounts, v.epoch, e.props.placement, d.t, label, sub, round, s.longEvery, d.isIdle ? s.focusMs : 0])
 
       if (ring === undefined || ring.key !== key || v.now - ring.at > RING_TRUST_MS) {
@@ -307,7 +309,7 @@ export const register: Register = (on, options) => {
         }
       }
 
-      hero = <Svg source={ring.source} alt={`${label}, ${formatLeft(d.isIdle ? s.focusMs : d.left, false)}${d.isIdle ? '' : ' left'}`} isInteractive />
+      hero = <Svg source={ring.source} alt={`${label}, ${formatLeft(d.isIdle ? s.focusMs : d.left, false)}${d.isIdle ? '' : ' left'}`} />
     } else {
       hero = (
         <Box flexDirection="column">
@@ -322,7 +324,7 @@ export const register: Register = (on, options) => {
       )
     }
 
-    const startWith = (preset: 'pomodoro' | 'long' | 'flow') => () => {
+    const startWith = (preset: 'pomodoro' | 'long' | 'flow' | number) => () => {
       const intention = draft.trim()
       draft = ''
       void f.start(intention, preset)
@@ -338,6 +340,17 @@ export const register: Register = (on, options) => {
           {hint !== undefined && <Text dimColor>{hint}</Text>}
         </Box>
         {body.filter((child): child is RenderElement => child !== null)}
+      </Box>
+    )
+
+    // A row of choices in equal columns, each button stretched to fill its own.
+    const even = (...buttons: RenderElement[]) => (
+      <Box flexDirection="row" columnGap={1}>
+        {buttons.map((button, i) => (
+          <Box key={`col-${i}`} flexDirection="column" flexGrow={1} alignItems="stretch">
+            {button}
+          </Box>
+        ))}
       </Box>
     )
 
@@ -357,11 +370,12 @@ export const register: Register = (on, options) => {
               startWith('pomodoro')()
             }}
           />,
-          <Box flexDirection="row" flexWrap="wrap" columnGap={1} rowGap={1}>
-            <Button key="start" label={`${Math.round(s.focusMs / 60_000)} min`} variant="primary" onPress={startWith('pomodoro')} />
-            <Button key="start-50" label="50 min" onPress={startWith('long')} />
-            <Button key="start-flow" label="Flow" onPress={startWith('flow')} />
-          </Box>,
+          even(
+            <Button key="start-15" label="15 min" onPress={startWith(15)} />,
+            <Button key="start" label={`${Math.round(s.focusMs / 60_000)} min`} variant="primary" onPress={startWith('pomodoro')} />,
+            <Button key="start-50" label="50 min" onPress={startWith('long')} />,
+            <Button key="start-flow" label="Flow" onPress={startWith('flow')} />,
+          ),
         )
       : d.isFocus
         ? card(
@@ -390,11 +404,11 @@ export const register: Register = (on, options) => {
             v.checkIn !== null ? 'How did that block go?' : 'Break',
             undefined,
             v.checkIn === null ? null : (
-              <Box flexDirection="row" flexWrap="wrap" columnGap={1} rowGap={1}>
-                <Button key="check-did" label="Did it" onPress={() => void f.answerCheckIn('did')} />
-                <Button key="check-partly" label="Partly" onPress={() => void f.answerCheckIn('partly')} />
-                <Button key="check-distracted" label="Got distracted" onPress={() => void f.answerCheckIn('distracted')} />
-              </Box>
+              even(
+                <Button key="check-did" label="Did it" onPress={() => void f.answerCheckIn('did')} />,
+                <Button key="check-partly" label="Partly" onPress={() => void f.answerCheckIn('partly')} />,
+                <Button key="check-distracted" label="Got distracted" onPress={() => void f.answerCheckIn('distracted')} />,
+              )
             ),
             <Box flexDirection="row" flexWrap="wrap" columnGap={1} rowGap={1}>
               {d.isPaused && <Button key="resume" label="Resume" variant="primary" onPress={() => void f.resume()} />}

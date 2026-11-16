@@ -3,7 +3,7 @@
 Two small mods for Claude Code, made for long sessions where you want to stay on one thing.
 
 - **pomo** turns a Claude Code session into a place to lock in. Say what the block is for and start it. Your desktop notifications go quiet, Claude keeps its answers on that task, and a ring beside the chat counts the block down. Stray thoughts get parked for the break instead of chased. Afterwards it asks how the block went, and it can log every finished block to your Obsidian daily note.
-- **ember-theme** is a dark-only theme in mahogany, bone and the colours of a fire, over a hearth that glows at the foot of the window. Nothing on screen is blue, which is easier on the eyes late at night.
+- **ember-theme** is a dark-only theme in red-black, bone and the colours of a fire, over a hearth that glows at the foot of the window. Nothing on screen is blue, which is easier on the eyes late at night.
 
 Both follow one small design system, written up in [DESIGN.md](DESIGN.md).
 
@@ -49,7 +49,7 @@ These are mods, which is an early-access part of Claude Code. The apps draw them
 ## How a block works
 
 1. **Say what it's for.** Type the one thing into the dashboard, or `/pomo write the intro`.
-2. **Pick a length.** 25 minutes, 50 minutes, or **Flow**. Flow counts up until you press *Done*, then gives you a break of a fifth of the time you worked (3 to 20 minutes). Pomodoro-style fixed breaks and Flowtime both have some research behind them, so both are here.
+2. **Pick a length.** 15, 25 or 50 minutes, or **Flow**. Flow counts up until you press *Done*, then gives you a break of a fifth of the time you worked (3 to 20 minutes). Pomodoro-style fixed breaks and Flowtime both have some research behind them, so both are here.
 3. **Lock in.** For the length of the block:
    - Desktop notifications are silenced (mako, which Omarchy and other wlroots desktops use, or GNOME's banners), and come back for the break. mako only hides notifications in that mode if its config has a `[mode=do-not-disturb]` section with `invisible=1`. On macOS, or for anything else such as a site blocker, set your own start and end commands.
    - On Hyprland, the Claude window can go fullscreen and come back for the break (off by default).

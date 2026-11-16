@@ -15,15 +15,15 @@
 // the drawing mid-block, which is what made the old clock blink.
 
 // The Hearth palette. ember-theme's register.tsx holds the same values.
-const CHAR = '#22140f'
-const KINDLING = '#47291b'
-const BONE = '#f6e7cf'
-const ASH = '#b89c84'
-const GOLD = '#ffcf70'
-const EMBER = '#ff7a1f'
-const CINDER = '#9a431d'
-const GARNET = '#d93a1a'
-const MOSS = '#b3c95a'
+const CHAR = '#1e1013'
+const KINDLING = '#45222a'
+const BONE = '#fbeee4'
+const ASH = '#bd9c93'
+const GOLD = '#ffc640'
+const EMBER = '#ff6a1a'
+const CINDER = '#a8381f'
+const GARNET = '#e8341c'
+const MOSS = '#b6d65a'
 const FONT = "ui-rounded, 'SF Pro Rounded', system-ui, -apple-system, 'Segoe UI', sans-serif"
 
 /** A card's ground: char, with a hairline of light along its top edge. */
@@ -66,7 +66,8 @@ export type RingArgs = {
   rounds: number
 }
 
-const W = 280
+// Both cards share one width, so the pane stretches them to the same scale.
+const W = 320
 const H = 264
 const CX = W / 2
 const CY = H / 2

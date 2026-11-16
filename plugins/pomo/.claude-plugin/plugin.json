@@ -118,7 +118,7 @@
       "type": "number",
       "title": "Noise volume",
       "description": "From 0 to 1, for the brown, pink or white noise bed.",
-      "default": 0.5
+      "default": 0.8
     },
     "noiseQuietInBreaks": {
       "type": "boolean",

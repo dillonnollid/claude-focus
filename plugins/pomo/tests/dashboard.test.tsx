@@ -45,12 +45,12 @@ async function ringNow(pane: Mounted): Promise<string> {
 }
 
 /** The engine beneath the plugin. `ran` collects every command it runs. */
-function engine(on: On, opts: { isCloud?: boolean; tools?: string[]; isPlaced?: boolean } = {}) {
+function engine(on: On, opts: { isCloud?: boolean; tools?: string[]; isPlaced?: boolean; store?: Record<string, unknown> } = {}) {
   const clock = mock.clock(on, { now: START })
   const ran: string[] = []
   const toasts: string[] = []
   const filled: string[] = []
-  mock.store(on)
+  mock.store(on, opts.store)
   mock.env(on, opts.isCloud === false ? { HOME: '/home/me' } : { CLAUDE_CODE_REMOTE: 'true', HOME: '/home/me' })
   on('process.run', (_, e) => {
     const line = e.argv.join(' ')
@@ -274,4 +274,12 @@ test('a leading number sets the length, and /pomo answers in text where no dashb
   expect((await run($, 'pomo', '40 min deck')).text).toContain('Focus on deck for 40 min.')
   await run($, 'pomo', 'stop')
   expect((await run($, 'pomo', '500 nope')).text).toContain('5 to 180 minutes')
+})
+
+test('blocks finished before minutes were counted get their minutes back, once', async ($, on) => {
+  // A day from an older version: three blocks, but minutes for only two.
+  engine(on, { store: { days: { '2026-11-16': 3 }, minutes: { '2026-11-16': 50 } } })
+  await $.session.start({ cwd: '/work', surface: 'desktop', isInteractive: true })
+
+  expect((await run($, 'pomo', 'status')).text).toContain('Today 3 of 8 blocks, 75 min')
 })

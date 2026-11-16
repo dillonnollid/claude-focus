@@ -111,7 +111,7 @@ export function settingsFrom(o: Options): Settings {
     property: str(o, 'vaultProperty', 'deep_work_mins') || 'deep_work_mins',
     unit: str(o, 'vaultUnit', 'minutes') === 'sessions' ? 'sessions' : 'minutes',
     timeZone: str(o, 'timeZone', ''),
-    noiseGain: num(o, 'noiseVolume', 0.5, 0, 1),
+    noiseGain: num(o, 'noiseVolume', 0.8, 0, 1),
     noiseQuietInBreaks: bool(o, 'noiseQuietInBreaks', true),
     focusSwitch: str(o, 'focusSwitch', 'auto') === 'off' ? 'off' : 'auto',
     fullscreen: bool(o, 'fullscreen', false),
@@ -1129,7 +1129,32 @@ export function createFocus(io: Io, s: Settings) {
     }
   }
 
-  const begin = () => sync()
+  // Blocks finished before pomo counted minutes have a day but no minutes.
+  // Once, give each such block the usual length, so the day's minutes match
+  // its blocks; a day's minutes already cover whole blocks of that length.
+  const backfillMinutes = () =>
+    locked(async () => {
+      if ((await io.get('minutesBackfilled')) === true) {
+        return
+      }
+
+      const days = await loadRecord('days')
+      const mins = await loadRecord('minutes')
+      const block = Math.round(s.focusMs / MIN)
+
+      for (const [key, count] of Object.entries(days)) {
+        const covered = Math.round((mins[key] ?? 0) / block)
+
+        if (count > covered) {
+          mins[key] = (mins[key] ?? 0) + (count - covered) * block
+        }
+      }
+
+      await io.set('minutes', mins)
+      await io.set('minutesBackfilled', true)
+    })
+
+  const begin = () => backfillMinutes().then(() => sync())
 
   const end = () => {
     playing?.stop()
