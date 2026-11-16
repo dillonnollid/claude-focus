@@ -57,7 +57,7 @@ These are mods, which is an early-access part of Claude Code. The apps draw them
 4. **Park stray thoughts.** The field under the timer, or `/park look up flights`. A toast confirms it, the field empties for the next one, and the thought joins a dim list under the timer so you can see it landed. At the break each one gets two buttons: tick it off, or *Ask*, which puts it in the prompt box for Claude. They're also added under a *Parked* heading in that day's daily note.
 5. **Check in.** When the block ends, three buttons ask how it went: *Did it*, *Partly*, *Got distracted*. The day card shows your on-task share.
 
-The ring burns down like a stick of incense: the lit arc is the time left, and it shrinks behind a glowing tip. It is drawn once when a block starts and runs its own clock from there, so it never blinks. Under it, the day card lights one coal per finished block toward your daily goal, above the week's bars, your streak and your on-task share. If a block runs over, *+5 min* extends it.
+The ring burns down like a stick of incense: the lit arc is the time left, and it shrinks behind a glowing tip, with the minutes left in large numerals in the middle. The timer keeps running wherever you are: switch to another window or tab, study somewhere else, and the clock is right when you come back. Under it, the day card lights one coal per finished block toward your daily goal, above the week's bars, your streak and your on-task share. If a block runs over, *+5 min* extends it.
 
 | Command | What it does |
 |---|---|

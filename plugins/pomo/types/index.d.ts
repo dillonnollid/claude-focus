@@ -47,8 +47,6 @@ export type View = {
   quality: [number, number, number]
   /** When the snapshot was taken, for the time left. */
   now: number
-  /** Goes up when the clock jumped (the computer slept), so the ring is drawn afresh. */
-  epoch: number
   /** The last seven days, oldest first. */
   week: { label: string; count: number; isToday: boolean }[]
   /** One line on where finished blocks are logged. */

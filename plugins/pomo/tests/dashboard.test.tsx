@@ -127,19 +127,29 @@ test('the dashboard draws on every surface, starts from a preset, counts down, p
   await pane.press({ key: 'start-50' })
   const drawnAtStart = await ring(pane)
   expect(drawnAtStart).toContain('<title>Focus 50:00</title>')
-  expect(drawnAtStart).toContain('>CV intro<')
+  expect(drawnAtStart).toContain('>50<')
+  expect(drawnAtStart).toContain('minutes left')
+  expect((await pane.find({ type: 'Text', text: /CV intro/ }))?.text).toBe('CV intro')
+
+  // The drawing holds no countdown of its own: the app restarts an image's
+  // animations whenever it redraws it (a window or tab switch), and a clock
+  // that ran by itself then showed the time it was drawn at.
+  expect(drawnAtStart).not.toMatch(/@keyframes (arc|tip|m10|m1|s10|s1)\b/)
+
+  // So it is drawn afresh each minute, and left alone within one.
   await clock.advance(90_000)
-  // One drawing serves the whole block: it runs its own clock, so nothing
-  // swaps it mid-block. That swap is what made the clock blink.
-  expect(await ring(pane)).toBe(drawnAtStart)
+  const atNinety = await ring(pane)
+  expect(atNinety).toContain('>49<')
   expect(await ringNow(pane)).toBe('Focus, 49 min left')
+  await clock.advance(20_000)
+  expect(await ring(pane)).toBe(atNinety)
 
   await pane.press({ key: 'pause' })
   await clock.advance(60_000)
-  expect(await ring(pane)).toContain('<title>Focus, paused 48:30</title>')
+  expect(await ring(pane)).toContain('<title>Focus, paused 48:10</title>')
   await pane.press({ key: 'resume' })
   await pane.press({ key: 'more' })
-  expect(await ring(pane)).toContain('<title>Focus 53:30</title>')
+  expect(await ring(pane)).toContain('<title>Focus 53:10</title>')
   await clock.advance(30_000)
   expect(await ringNow(pane)).toBe('Focus, 53 min left')
 

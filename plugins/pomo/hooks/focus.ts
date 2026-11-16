@@ -192,8 +192,6 @@ export function createFocus(io: Io, s: Settings) {
   let chain: Promise<unknown> = Promise.resolve()
   let shown: View | undefined
   let drawn = ''
-  let epoch = 0
-  let syncedAt = 0
   // Noise belongs to this session alone, so two open sessions never play
   // two beds over each other.
   let noise: Noise = 'off'
@@ -643,7 +641,6 @@ export function createFocus(io: Io, s: Settings) {
       streak: streakOf(days, todayKey),
       quality,
       now,
-      epoch,
       week: weekOf(days, now),
       logLine: logLine(vault),
       vaultName: vault.root === null ? '' : (vault.root.replace(/[\\/]+$/, '').split(/[\\/]/).pop() ?? ''),
@@ -710,13 +707,6 @@ export function createFocus(io: Io, s: Settings) {
     locked(async () => {
       const now = await io.now()
 
-      // A gap far longer than the tick means the computer slept: the ring's
-      // own clock stood still through it, so it gets a fresh drawing.
-      if (syncedAt !== 0 && now - syncedAt > (tick?.ms ?? 30_000) + 15_000) {
-        epoch += 1
-      }
-
-      syncedAt = now
       const { saved, ended } = settle(await loadSaved(), now, s, dayKeyOf)
 
       if (ended.length > 0) {

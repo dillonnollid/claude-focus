@@ -34,14 +34,14 @@ The values live in `plugins/pomo/hooks/art.ts`, `plugins/ember-theme/hooks/regis
 
 1. **Lit and ash.** Solid ember is live or done. Dotted kindling is waiting or spent. The ring's burnt stretch, an unlit coal and an empty day are all dotted for the same reason.
 2. **Heat is the hierarchy.** Gold marks a single point at a time. Ember marks what matters now. Cinder marks what is over. If two things on one card are gold, one of them is wrong.
-3. **Only fire moves.** The tip flickers, the coals breathe, sparks rise. Cards, buttons and text hold still. Every animation stops under the system's reduce-motion setting except the clock's digits, which are information.
+3. **Only fire moves.** The tip flickers, the coals breathe, sparks rise. Cards, buttons and text hold still. Every animation stops under the system's reduce-motion setting. No animation carries the time: the app restarts a drawing's animations whenever it redraws it, so the clock is drawn afresh each minute instead.
 4. **Rest is green and still.** A break swaps the heat for moss and turns the flicker off. The change of colour is the cue to step away.
 5. **One drawing per state.** A drawing is built when the timer changes and then runs by itself on CSS. Nothing redraws on a tick, so nothing blinks.
 6. **Plain words.** Sentence case. A button says what it does and the toast that follows uses the same word: *park* gives *Parked*. Empty states say what to do next.
 
 ## Pieces
 
-**The ring** (`ringSvg`). 280 by 264, radius 96. The lit arc is the time left and burns away clockwise from the top behind a gold tip. Sixty dots of kindling mark where it has been. The digits are four columns of glyphs that step on CSS, zero padded so the colon never moves. Under them sits what the block is for, then one pip per block of the set.
+**The ring** (`ringSvg`). 320 by 264, radius 96. The lit arc is the time left and burns away clockwise from the top behind a gold tip. Sixty dots of kindling mark where it has been. In the middle, the whole minutes left in large numerals, read like a clock across the room, with `<1` in the last minute, and one pip per block of the set. What the block is for sits in the card below, as its title.
 
 **The day** (`daySvg`). 280 by 200. One coal per block of the daily goal, lit as you finish them, the next one outlined while a block runs. A finished block's coal flares once. Below, the week as bars with today in full heat, and the streak and on-task share in ash.
 
