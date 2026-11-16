@@ -1,61 +1,57 @@
 import type { Register, ThemeSetArgs } from 'claude-code'
 
 import { makeColors } from './make-colors.js'
+import { hearthSvg } from './scene'
 
-// Ember: dark only. Near-black warm charcoal surfaces, cream text instead of
-// white, and every role pulled to the warm side of the wheel so nothing on
-// screen is blue. Code highlighting is built from these roles too.
+// Ember: dark only, and no blue anywhere. It follows the Hearth design system
+// (DESIGN.md at the repository root): every surface is a shade of mahogany
+// rather than a neutral charcoal, text is the colour of bone, and the accents
+// are the heat of a fire, from gold through ember to garnet. Code highlighting
+// is built from the same roles. pomo's drawings hold the same values.
+const SOOT = '#1a0f0c'
+
 const { theme, problems } = makeColors({
   label: 'Ember',
   only: 'dark',
   roles: {
-    accent: '#ff7a1a', // ember orange: links, focus rings, code keywords
-    danger: '#e5484d', // still a red
-    success: '#9acb55', // a warm green, for strings and "added"
-    warning: '#f5b43c', // amber
-    pro: '#e8789a', // dusty rose, in place of the usual purple
+    accent: '#ff7a1f', // ember: links, focus rings, code keywords
+    danger: '#f0524f', // still a red, a step cooler than ember so the two never blur
+    success: '#b3c95a', // moss: strings, "added", and a break in pomo
+    warning: '#ffcf70', // gold
+    pro: '#ff8fa3', // rose, in place of the usual purple
   },
   dark: {
     gray: {
       anchors: {
-        'surface-0': '#141210',
-        'surface-1': '#1b1815',
-        'surface-2': '#221e1a',
-        'surface-3': '#25211d',
-        'text-primary': '#f3e6cf', // cream
-        'text-secondary': '#dccbae', // beige
-        'text-muted': '#ad9c84',
+        'surface-0': SOOT, // soot: the page
+        'surface-1': '#22140f', // char: cards
+        'surface-2': '#2b1a13', // bark: panels
+        'surface-3': '#2c1b13', // menus, kept close to bark so muted text stays readable
+        'text-primary': '#f6e7cf', // bone
+        'text-secondary': '#dcc4a8',
+        'text-muted': '#b89c84', // ash
       },
     },
     git: {
-      added: '#9acb55',
-      removed: '#e5484d',
-      modified: '#f5b43c',
-      merged: '#e8789a',
+      added: '#b3c95a',
+      removed: '#f0524f',
+      modified: '#ffcf70',
+      merged: '#ff8fa3',
       closed: '#e0685c',
-      conflicting: '#ff7a1a',
-      draft: '#b8a68c',
+      conflicting: '#ff7a1f',
+      draft: '#b89c84',
     },
   },
 })
 
+const SCENE = 'hearth'
 const FLAT: ThemeSetArgs = { colors: theme, overrideColorScheme: 'dark' }
-
-const GLOW: ThemeSetArgs = {
-  ...FLAT,
-  backdrop: {
-    gradient: {
-      stops: [
-        { at: 0, color: '#141210' },
-        { at: 0.62, color: '#141210' },
-        { at: 1, color: '#2a160a' },
-      ],
-    },
-  },
-}
+// The app frosts its panels over the hearth, tinted soot so text keeps its contrast.
+const HEARTH: ThemeSetArgs = { ...FLAT, backdrop: { scene: SCENE, glass: { blur: 26, tint: SOOT, opacity: 0.7 } } }
 
 export const register: Register = (on, options) => {
-  const look = options.glow === false ? FLAT : GLOW
+  const look = options.glow === false ? FLAT : HEARTH
+  const scene = hearthSvg(options.sparks !== false)
   let lastResult = 'not set yet'
 
   on('session.start', async ($, e, next) => {
@@ -86,6 +82,16 @@ export const register: Register = (on, options) => {
     }
 
     return next(e)
+  })
+
+  on('ui.render', { component: 'Backdrop' }, ($, e, next) => {
+    if ((e.surface !== 'desktop' && e.surface !== 'mobile') || e.props.plugin !== 'ember-theme' || e.props.scene !== SCENE) {
+      return next(e)
+    }
+
+    const { Svg } = $.ui.resolve(e)
+
+    return <Svg source={scene} alt="A bed of coals glowing at the foot of the window, with a few sparks drifting up" isInteractive />
   })
 
   on('command.run', { command: 'ember' }, async ($, e) => {

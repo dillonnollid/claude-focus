@@ -3,7 +3,9 @@
 Two small mods for Claude Code, made for long sessions where you want to stay on one thing.
 
 - **pomo** turns a Claude Code session into a place to lock in. Say what the block is for and start it. Your desktop notifications go quiet, Claude keeps its answers on that task, and a ring beside the chat counts the block down. Stray thoughts get parked for the break instead of chased. Afterwards it asks how the block went, and it can log every finished block to your Obsidian daily note.
-- **ember-theme** is a dark-only theme in warm charcoal, ember orange and cream text. Nothing on screen is blue, which is easier on the eyes late at night.
+- **ember-theme** is a dark-only theme in mahogany, bone and the colours of a fire, over a hearth that glows at the foot of the window. Nothing on screen is blue, which is easier on the eyes late at night.
+
+Both follow one small design system, written up in [DESIGN.md](DESIGN.md).
 
 Install either one on its own, or both.
 
@@ -52,10 +54,10 @@ These are mods, which is an early-access part of Claude Code. The apps draw them
    - Desktop notifications are silenced (mako, which Omarchy and other wlroots desktops use, or GNOME's banners), and come back for the break. mako only hides notifications in that mode if its config has a `[mode=do-not-disturb]` section with `invisible=1`. On macOS, or for anything else such as a site blocker, set your own start and end commands.
    - On Hyprland, the Claude window can go fullscreen and come back for the break (off by default).
    - Claude is told what the block is for. It keeps replies tight and, when you ask for something unrelated, offers to park it rather than wander off. This adds a few lines to Claude's instructions only while a block runs.
-4. **Park stray thoughts.** The field under the timer, or `/park look up flights`. They stay out of sight until the break, then show up as a list you can tick off. They're also added under a *Parked* heading in that day's daily note.
-5. **Check in.** When the block ends, three buttons ask how it went: *Did it*, *Partly*, *Got distracted*. The *On task* tile shows your share for the day.
+4. **Park stray thoughts.** The field under the timer, or `/park look up flights`. A toast confirms it, the field empties for the next one, and the thought joins a dim list under the timer so you can see it landed. At the break each one gets two buttons: tick it off, or *Ask*, which puts it in the prompt box for Claude. They're also added under a *Parked* heading in that day's daily note.
+5. **Check in.** When the block ends, three buttons ask how it went: *Did it*, *Partly*, *Got distracted*. The day card shows your on-task share.
 
-The ring animates its own seconds, sweep and breathing glow, and the tiles show today's blocks, minutes, streak and on-task share above a week chart. If a block runs over, *+5 min* extends it.
+The ring burns down like a stick of incense: the lit arc is the time left, and it shrinks behind a glowing tip. It is drawn once when a block starts and runs its own clock from there, so it never blinks. Under it, the day card lights one coal per finished block toward your daily goal, above the week's bars, your streak and your on-task share. If a block runs over, *+5 min* extends it.
 
 | Command | What it does |
 |---|---|
@@ -85,7 +87,7 @@ When a block finishes, pomo adds its minutes to a number in that day's daily not
 
 - It changes one line of the frontmatter and leaves everything else in the file alone. If the property is missing it adds it, and if it holds something that isn't a number it leaves the note untouched.
 - If today's note doesn't exist yet, the minutes wait and are written as soon as it does. It never creates a note itself, so your template still applies.
-- It logs when the session runs inside a vault, or from anywhere once you set **Obsidian vault** in `/config` to your vault's path. Set it to `off` to turn logging off.
+- It finds your vault by itself. It looks first at the folder the session is in, then at the list of vaults Obsidian keeps on your computer, taking the one that's open. If it finds none, the dashboard shows a field to paste the vault's folder into. To pick a different vault, set **Obsidian vault** in `/config`. Set it to `off` to turn logging off.
 - It doesn't write from cloud sessions, because their copy of your vault is temporary.
 
 ## Settings
@@ -94,16 +96,16 @@ All of these are in `/config`, under each plugin.
 
 **pomo**: the focus switch (on or off), fullscreen on Hyprland, your own commands for a block's start and end, keeping Claude on task, parked thoughts to the daily note and their heading, focus, short break and long break lengths, blocks before a long break, whether breaks and focus blocks start by themselves, daily goal, chimes and their volume, noise volume and whether it stops for breaks, seconds in the band, whether the dashboard opens at start, vault path, which property to add to, minutes or one per block, and a time zone (for example `Australia/Perth`) if your computer's clock zone isn't the one you live in.
 
-**ember-theme**: the faint orange glow at the foot of the window, on or off.
+**ember-theme**: the hearth at the foot of the window, on or off, and the sparks that drift up from it, on or off. Your system's reduce-motion setting stills the sparks too.
 
 ## Make it yours
 
 Everything is plain TypeScript.
 
-- Colours are in `plugins/ember-theme/hooks/register.ts`. Change the hex values and keep `make-colors.js` as it is, since it builds the full palette from those few colours and checks the contrast.
+- Colours are in `plugins/ember-theme/hooks/register.tsx`, and the hearth is drawn in `scene.ts` beside it. Change the hex values and keep `make-colors.js` as it is, since it builds the full palette from those few colours and checks the contrast. [DESIGN.md](DESIGN.md) says what each colour is for.
 - The timer's logic is in `plugins/pomo/hooks/timer.ts` and `focus.ts`, and the dashboard's layout is in `register.tsx`.
 - The chimes and noise loops are WAV files in `plugins/pomo/sounds/`. Swap in your own.
-- The ring, the tiles and the week chart are drawn as SVG in `plugins/pomo/hooks/art.ts`.
+- The ring and the day card are drawn as SVG in `plugins/pomo/hooks/art.ts`.
 
 To check a change:
 

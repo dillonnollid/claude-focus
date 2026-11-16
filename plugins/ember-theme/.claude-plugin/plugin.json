@@ -1,6 +1,6 @@
 {
   "name": "ember-theme",
-  "description": "A warm, dark-only theme for long sessions: charcoal, ember orange and cream text, with no blue anywhere.",
+  "description": "A warm, dark-only theme for long sessions: mahogany surfaces, bone text and the colours of a fire, over a hearth that glows at the foot of the window. No blue anywhere.",
   "author": {
     "name": "Dillon Rosenkranz"
   },
@@ -15,8 +15,14 @@
   "userConfig": {
     "glow": {
       "type": "boolean",
-      "title": "Ember glow",
-      "description": "A faint orange glow at the foot of the window. Off gives a flat charcoal background.",
+      "title": "Hearth",
+      "description": "A bed of coals glowing at the foot of the window, behind frosted panels. Off gives a flat background.",
+      "default": true
+    },
+    "sparks": {
+      "type": "boolean",
+      "title": "Sparks",
+      "description": "A few sparks drifting slowly up from the hearth. Off keeps the glow still. Your system's reduce-motion setting turns them off too.",
       "default": true
     }
   }
