@@ -3,6 +3,8 @@ import type { Register } from 'claude-code'
 
 import type { View } from '../types'
 import { daySvg, ringSvg } from './art'
+import { mascotSvg } from './mascot'
+import type { MascotState } from './mascot'
 import { NOISES, createFocus, settingsFrom } from './focus'
 import type { Focus, Io, RunResult } from './focus'
 import { dots, elapsed, formatLeft, remaining } from './timer'
@@ -62,6 +64,7 @@ export const register: Register = (on, options) => {
   // Each parked thought gets a new field, which is what empties the box.
   let parkSeq = 0
   let ring: { key: string; at: number; source: string } | undefined
+  let mascot: { key: string; source: string } | undefined
   // Bumped when the app connects, so a fresh window gets a fresh ring.
   let mounts = 0
 
@@ -252,19 +255,34 @@ export const register: Register = (on, options) => {
     const round = Math.min((v.cycleDone % s.longEvery) + (d.isFocus ? 1 : 0), s.longEvery)
     const goal = s.goal > 0 ? `${v.today} of ${s.goal} today` : `${v.today} today`
     const label = d.isPaused ? `${d.name}, paused` : d.name
-    const sub = d.isIdle
+    // The header says what is happening and what for; the ring keeps to the time.
+    const headline = d.isIdle ? 'Ready when you are' : d.isPaused ? 'Paused' : d.isFocus ? (d.isFlow ? 'In flow' : 'Focusing') : d.name === 'Long break' ? 'Long break' : 'On a break'
+    const detail = d.isIdle
       ? goal
       : d.isFocus
         ? d.intention !== ''
           ? d.intention
           : d.isFlow
-            ? 'end it when you are done'
+            ? 'no clock to beat, stop when you are done'
             : `block ${round} of ${s.longEvery}`
         : 'stand up, look far away'
+    const sub = d.isFlow && d.isFocus ? 'end it when you are done' : ''
+    const pose: MascotState = d.isIdle ? 'idle' : d.isPaused ? 'paused' : d.isFocus ? (d.isFlow ? 'flow' : 'focus') : 'break'
+    // A break that has only just begun gets a little celebration first.
+    const isFresh = pose === 'break' && d.done < 10_000
+
+    // One drawing per pose, kept between redraws so the animation never restarts.
+    const mascotKey = JSON.stringify([mounts, pose, isFresh])
+
+    if (mascot === undefined || mascot.key !== mascotKey) {
+      mascot = { key: mascotKey, source: mascotSvg(pose, isFresh) }
+    }
+
+    const cinder = mascot.source
 
     // The small form of a minimized pane on the desktop: a glance, no form.
     if (e.props.placement === 'widget') {
-      return (
+      const glance = (
         <Box flexDirection="column">
           <Text color={d.color} weight="semibold" size="caption">
             {label}
@@ -277,11 +295,35 @@ export const register: Register = (on, options) => {
           </Text>
         </Box>
       )
+
+      return Svg === undefined ? (
+        glance
+      ) : (
+        <Box flexDirection="row" alignItems="center" columnGap={1}>
+          <Svg source={cinder} alt={`Cinder the ember, ${headline.toLowerCase()}`} width={56} height={43} isInteractive />
+          {glance}
+        </Box>
+      )
     }
 
     let hero
+    let header
 
     if (Svg !== undefined) {
+      header = (
+        <Box flexDirection="row" alignItems="center" columnGap={1}>
+          <Svg source={cinder} alt={`Cinder the ember, ${headline.toLowerCase()}`} width={96} height={74} isInteractive />
+          <Box flexDirection="column" flexShrink={1}>
+            <Text color={d.color} weight="semibold">
+              {headline}
+            </Text>
+            <Text dimColor wrap="truncate-end">
+              {detail}
+            </Text>
+          </Box>
+        </Box>
+      )
+
       // One drawing per state of the timer. It animates itself from there, so
       // redrawing the dashboard around it never restarts or blinks the clock.
       const key = JSON.stringify([mounts, v.epoch, e.props.placement, d.t, label, sub, round, s.longEvery, d.isIdle ? s.focusMs : 0])
@@ -306,11 +348,12 @@ export const register: Register = (on, options) => {
 
       hero = <Svg source={ring.source} alt={`${label}, ${formatLeft(d.isIdle ? s.focusMs : d.left, false)}${d.isIdle ? '' : ' left'}`} width={280} height={264} isInteractive />
     } else {
+      header = null
       hero = (
         <Box flexDirection="column">
           <Text color={d.color} weight="semibold">
             {label}
-            <Text dimColor> {sub}</Text>
+            <Text dimColor> {detail}</Text>
           </Text>
           <Text weight="bold" tabular>
             {d.isFlow && d.isFocus ? `${Math.floor(d.done / 60_000)} min in` : `${formatLeft(d.isIdle ? s.focusMs : d.left, false)}${d.isIdle ? '' : ' left'}`}
@@ -420,11 +463,12 @@ export const register: Register = (on, options) => {
             minutes: v.todayMinutes,
             streak: v.streak,
             onTask: answered === 0 ? undefined : (did + partly / 2) / answered,
+            isFresh: v.checkIn !== null,
             week: v.week,
           })}
           alt={`Today ${goal}, ${v.todayMinutes} minutes, streak ${v.streak}. ${v.week.map(day => `${day.label} ${day.count}`).join(', ')}`}
           width={280}
-          height={196}
+          height={200}
         />
       ) : (
         <Box flexDirection="column">
@@ -471,6 +515,7 @@ export const register: Register = (on, options) => {
 
     return (
       <Box flexDirection="column" gap={1} paddingX={1}>
+        {header}
         {hero}
         {controls}
         {parked}

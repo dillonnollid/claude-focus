@@ -24,18 +24,22 @@ const BAND = {
 const START = Date.UTC(2026, 10, 16, 1, 0, 0)
 const RAN = { stderr: '', isStdoutTruncated: false, isStderrTruncated: false }
 
-type Mounted = { find: (q: { type?: string; key?: string; text?: string | RegExp }) => Promise<{ text: string; props: Record<string, unknown> } | undefined> }
+type Found = { text: string; props: Record<string, unknown> }
+type Mounted = {
+  find: (q: { type?: string; key?: string; text?: string | RegExp }) => Promise<Found | undefined>
+  findAll: (q: { type?: string }) => Promise<Found[]>
+}
 
 /** The ring's SVG text on a surface that draws it: its title says what it was drawn as. */
 async function ring(pane: Mounted): Promise<string> {
-  const svg = await pane.find({ type: 'Svg' })
+  const svg = (await pane.findAll({ type: 'Svg' })).find(found => !String(found.props.alt).startsWith('Cinder'))
 
   return String(svg?.props.source ?? '')
 }
 
 /** What the ring says now, in words: the drawing itself animates between redraws. */
 async function ringNow(pane: Mounted): Promise<string> {
-  const svg = await pane.find({ type: 'Svg' })
+  const svg = (await pane.findAll({ type: 'Svg' })).find(found => !String(found.props.alt).startsWith('Cinder'))
 
   return String(svg?.props.alt ?? '')
 }
@@ -123,7 +127,8 @@ test('the dashboard draws on every surface, starts from a preset, counts down, p
   await pane.press({ key: 'start-50' })
   const drawnAtStart = await ring(pane)
   expect(drawnAtStart).toContain('<title>Focus 50:00</title>')
-  expect(drawnAtStart).toContain('>CV intro<')
+  const cinder = (await pane.findAll({ type: 'Svg' })).find(found => String(found.props.alt).startsWith('Cinder'))
+  expect(String(cinder?.props.source)).toContain('typing away')
   await clock.advance(90_000)
   // One drawing serves the whole block: it runs its own clock, so nothing
   // swaps it mid-block. That swap is what made the clock blink.
