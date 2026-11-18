@@ -1,13 +1,9 @@
 # claude-focus
 
-Two small mods for Claude Code, made for long sessions where you want to stay on one thing.
+A focus mod for Claude Code, made for long sessions where you want to stay on one thing.
 
-- **pomo** turns a Claude Code session into a place to lock in. Say what the block is for and start it. Your desktop notifications go quiet, Claude keeps its answers on that task, and a ring beside the chat counts the block down. Stray thoughts get parked for the break instead of chased. Afterwards it asks how the block went, and it can log every finished block to your Obsidian daily note.
-- **ember-theme** is a dark-only theme in red-black, bone and the colours of a fire, over a hearth that glows at the foot of the window. Nothing on screen is blue, which is easier on the eyes late at night.
-
-Both follow one small design system, written up in [DESIGN.md](DESIGN.md).
-
-Install either one on its own, or both.
+**pomo** turns a Claude Code session into a place to lock in. Say what the block is for and start it. Your desktop notifications go quiet, Claude keeps its answers on that task, and a ring beside the chat counts the block down. Stray thoughts get parked for the break instead of chased. Afterwards it asks how the block went, and it can log every finished block to your Obsidian daily note.
+Its look follows one small design system, written up in [DESIGN.md](DESIGN.md).
 
 ## Install
 
@@ -16,12 +12,11 @@ In a terminal, paste this whole block:
 ```bash
 claude plugin marketplace add dillonnollid/claude-focus
 claude plugin install pomo@claude-focus
-claude plugin install ember-theme@claude-focus
 ```
 
-Then quit and reopen Claude, or run `/reload-plugins` in a session that's already open. Leave out the last line if you only want the timer.
+Then quit and reopen Claude, or run `/reload-plugins` in a session that's already open.
 
-No terminal? In the desktop app, click **+** next to the prompt box, then **Plugins**, **Add marketplace** with `dillonnollid/claude-focus`, then add each plugin.
+No terminal? In the desktop app, click **+** next to the prompt box, then **Plugins**, **Add marketplace** with `dillonnollid/claude-focus`, then add **pomo**.
 
 ### Turn on updates, once
 
@@ -32,19 +27,17 @@ If you'd rather update by hand:
 ```bash
 claude plugin marketplace update claude-focus
 claude plugin update pomo@claude-focus
-claude plugin update ember-theme@claude-focus
 ```
 
 ## Where it shows
 
 | | Desktop app | Mobile app | Terminal |
 |---|---|---|---|
-| Theme | yes | yes | no, terminals keep their own colours |
 | Focus dashboard | yes | yes | yes, as a pane in fullscreen mode |
 | Timer band above the prompt | yes | yes | yes |
 | Chimes and noise | macOS, and Linux with mpv, PipeWire, PulseAudio or ffplay | yes | macOS only |
 
-These are mods, which is an early-access part of Claude Code. The apps draw them only for sessions running on your own computer. A cloud session (one running on claude.ai, as phone sessions usually do) gets no dashboard, band or theme, so there `/pomo` prints the dashboard as text, and every command still works. A cloud session's timer and counts live on that cloud machine, separate from your computer's.
+These are mods, which is an early-access part of Claude Code. The apps draw them only for sessions running on your own computer. A cloud session (one running on claude.ai, as phone sessions usually do) gets no dashboard or band, so there `/pomo` prints the dashboard as text, and every command still works. A cloud session's timer and counts live on that cloud machine, separate from your computer's.
 
 ## How a block works
 
@@ -92,17 +85,13 @@ When a block finishes, pomo adds its minutes to a number in that day's daily not
 
 ## Settings
 
-All of these are in `/config`, under each plugin.
-
-**pomo**: the focus switch (on or off), fullscreen on Hyprland, your own commands for a block's start and end, keeping Claude on task, parked thoughts to the daily note and their heading, focus, short break and long break lengths, blocks before a long break, whether breaks and focus blocks start by themselves, daily goal, chimes and their volume, noise volume and whether it stops for breaks, seconds in the band, whether the dashboard opens at start, vault path, which property to add to, minutes or one per block, and a time zone (for example `Australia/Perth`) if your computer's clock zone isn't the one you live in.
-
-**ember-theme**: the hearth at the foot of the window, on or off, and the sparks that drift up from it, on or off. Your system's reduce-motion setting stills the sparks too.
+All of these are in `/config`, under pomo: the focus switch (on or off), fullscreen on Hyprland, your own commands for a block's start and end, keeping Claude on task, parked thoughts to the daily note and their heading, focus, short break and long break lengths, blocks before a long break, whether breaks and focus blocks start by themselves, daily goal, chimes and their volume, noise volume and whether it stops for breaks, seconds in the band, whether the dashboard opens at start, vault path, which property to add to, minutes or one per block, and a time zone (for example `Australia/Perth`) if your computer's clock zone isn't the one you live in.
 
 ## Make it yours
 
 Everything is plain TypeScript.
 
-- Colours are in `plugins/ember-theme/hooks/register.tsx`, and the hearth is drawn in `scene.ts` beside it. Change the hex values and keep `make-colors.js` as it is, since it builds the full palette from those few colours and checks the contrast. [DESIGN.md](DESIGN.md) says what each colour is for.
+- Colours are at the top of `plugins/pomo/hooks/art.ts`. [DESIGN.md](DESIGN.md) says what each one is for.
 - The timer's logic is in `plugins/pomo/hooks/timer.ts` and `focus.ts`, and the dashboard's layout is in `register.tsx`.
 - The chimes and noise loops are WAV files in `plugins/pomo/sounds/`. Swap in your own.
 - The ring and the day card are drawn as SVG in `plugins/pomo/hooks/art.ts`.
@@ -112,6 +101,14 @@ To check a change:
 ```bash
 claude plugin validate plugins/pomo
 claude plugin test plugins/pomo
+```
+
+## Upgrading from the theme
+
+Earlier versions of this repo also shipped **ember-theme**. It has been dropped so the repo does one thing. If you installed it, remove it with:
+
+```bash
+claude plugin uninstall ember-theme@claude-focus
 ```
 
 ## Licence

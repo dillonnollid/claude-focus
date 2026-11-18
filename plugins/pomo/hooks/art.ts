@@ -12,7 +12,7 @@
 // shrinking behind a glowing tip. The ring is drawn afresh each minute and
 // holds no countdown of its own (see ringSvg for why).
 
-// The Hearth palette. ember-theme's register.tsx holds the same values.
+// The Hearth palette. register.tsx repeats CHAR for the cards' ground.
 const CHAR = '#1e1013'
 const KINDLING = '#45222a'
 const BONE = '#fbeee4'
