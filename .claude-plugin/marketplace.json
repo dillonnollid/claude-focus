@@ -4,18 +4,13 @@
     "name": "Dillon Rosenkranz"
   },
   "metadata": {
-    "description": "A focus dashboard and a warm dark theme for Claude Code, built on one design system."
+    "description": "A focus dashboard for Claude Code: a timer beside the chat that keeps you and Claude on one task."
   },
   "plugins": [
     {
       "name": "pomo",
       "source": "./plugins/pomo",
       "description": "A focus dashboard beside the chat: a ring that burns down as the block runs, a parking lot for stray thoughts, a coal lit for every finished block, noise, chimes and logging to your Obsidian daily note."
-    },
-    {
-      "name": "ember-theme",
-      "source": "./plugins/ember-theme",
-      "description": "A warm, dark-only theme for long sessions. Mahogany, bone and the colours of a fire, over a hearth that glows at the foot of the window. No blue anywhere."
     }
   ]
 }
